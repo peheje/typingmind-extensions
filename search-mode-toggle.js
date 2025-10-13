@@ -1,11 +1,10 @@
 // == TypingMind Extension: Search-mode toggle =============================
-// v0.4 – 2025-10-13
+// v0.5 – 2025-10-13
 (() => {
 
   const STORAGE_KEY     = 'TM_searchModeOn';
   const SEARCH_SUFFIX   = ':search';
-  const PLUGIN_BTN_SEL  = '[id^="headlessui-menu-button-"]'; // Sélecteur plus flexible
-
+  const PLUGIN_CONTAINER_SEL = '.sm\\:relative'; 
   
   const log   = (...m) => console.log('[Search-mode]', ...m);
   const isOn  = ()    => localStorage.getItem(STORAGE_KEY) === 'true';
@@ -124,10 +123,13 @@
 
  
   const observer = new MutationObserver(() => {
-    const pluginBtn = document.querySelector(PLUGIN_BTN_SEL);
-    if (pluginBtn && !document.getElementById('tm-search-toggle-container')) {
-      pluginBtn.parentElement.insertBefore(makeSwitch(), pluginBtn.nextSibling);
-      log('Toggle switch injected');
+    if (document.getElementById('tm-search-toggle-container')) return;
+    
+    const pluginContainer = document.querySelector(PLUGIN_CONTAINER_SEL);
+    
+    if (pluginContainer) {
+      pluginContainer.parentElement.insertBefore(makeSwitch(), pluginContainer.nextSibling);
+      log('Toggle switch injected after plugin selector');
     }
   });
   observer.observe(document.body, {subtree: true, childList: true});
