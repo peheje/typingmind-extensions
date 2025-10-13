@@ -1,14 +1,41 @@
 // == TypingMind Extension: Search-mode toggle =============================
-// v0.6 – 2025-10-13
+// v0.7 – 2025-10-13
 (() => {
 
-  const STORAGE_KEY     = 'TM_searchModeOn';
-  const SEARCH_SUFFIX   = ':search';
+  const STORAGE_KEY           = 'TM_searchModeOn';
+  const MODELS_SEARCH_SUPPORT = 'TM_modelsSearchSupport';
+  const SEARCH_SUFFIX         = ':search';
 
   
   const log   = (...m) => console.log('[Search-mode]', ...m);
   const isOn  = ()    => localStorage.getItem(STORAGE_KEY) === 'true';
   const setOn = v     => localStorage.setItem(STORAGE_KEY, v);
+  
+  const getSearchSupportedModels = () => {
+    const data = localStorage.getItem(MODELS_SEARCH_SUPPORT);
+    return data ? JSON.parse(data) : {};
+  };
+  const setModelSearchSupport = (modelId, supported) => {
+    const models = getSearchSupportedModels();
+    models[modelId] = supported;
+    localStorage.setItem(MODELS_SEARCH_SUPPORT, JSON.stringify(models));
+  };
+  const isModelSearchSupported = (modelId) => {
+    return getSearchSupportedModels()[modelId] === true;
+  };
+
+  const getCurrentModel = () => {
+    try {
+      const chatSettings = localStorage.getItem('typingmind_chat_settings');
+      if (chatSettings) {
+        const settings = JSON.parse(chatSettings);
+        return settings.model || null;
+      }
+    } catch (err) {
+      log('Error getting current model', err);
+    }
+    return null;
+  };
 
  
   const nativeFetch = window.fetch;
@@ -34,7 +61,7 @@
     const container = document.createElement('div');
     container.id = 'tm-search-toggle-container';
     container.style.cssText = `
-      display: inline-flex;
+      display: none;
       align-items: center;
       gap: 8px;
       margin-left: 12px;
@@ -112,8 +139,11 @@
 
     document.addEventListener('keydown', e => {
       if (e.altKey && e.key.toLowerCase() === 's') {
-        input.checked = !input.checked;
-        input.onchange();
+        const currentModel = getCurrentModel();
+        if (currentModel && isModelSearchSupported(currentModel)) {
+          input.checked = !input.checked;
+          input.onchange();
+        }
       }
     });
 
@@ -121,12 +151,91 @@
     return container;
   }
 
+  function updateSwitchVisibility() {
+    const switchContainer = document.getElementById('tm-search-toggle-container');
+    if (!switchContainer) return;
+
+    const currentModel = getCurrentModel();
+    if (currentModel && isModelSearchSupported(currentModel)) {
+      switchContainer.style.display = 'inline-flex';
+    } else {
+      switchContainer.style.display = 'none';
+    }
+  }
+
+  function injectSearchSupportCheckbox() {
+    const modalContent = document.querySelector('[role="dialog"]');
+    if (!modalContent) return;
+
+    const hasModelIdInput = modalContent.querySelector('input[placeholder*="model"]') || 
+                            modalContent.querySelector('label[for*="model"]');
+    if (!hasModelIdInput) return;
+
+    if (modalContent.querySelector('#tm-search-support-checkbox')) return;
+
+    const checkboxContainer = document.createElement('div');
+    checkboxContainer.style.cssText = `
+      margin-top: 16px;
+      padding: 12px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      background-color: #f9fafb;
+    `;
+
+    const label = document.createElement('label');
+    label.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-size: 14px;
+    `;
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = 'tm-search-support-checkbox';
+    checkbox.style.cssText = `
+      width: 16px;
+      height: 16px;
+      cursor: pointer;
+    `;
+
+    const labelText = document.createElement('span');
+    labelText.textContent = '🔍 This model supports :search suffix';
+    labelText.style.cssText = `
+      user-select: none;
+    `;
+
+    label.appendChild(checkbox);
+    label.appendChild(labelText);
+    checkboxContainer.appendChild(label);
+
+    const formGroups = modalContent.querySelectorAll('div.space-y-4, div.flex.flex-col, form > div');
+    if (formGroups.length > 0) {
+      const targetGroup = formGroups[0];
+      targetGroup.appendChild(checkboxContainer);
+      log('Search support checkbox injected');
+
+      const modelIdInput = modalContent.querySelector('input[name*="model"], input[placeholder*="model"]');
+      if (modelIdInput && modelIdInput.value) {
+        checkbox.checked = isModelSearchSupported(modelIdInput.value);
+      }
+
+      checkbox.onchange = () => {
+        if (modelIdInput && modelIdInput.value) {
+          setModelSearchSupport(modelIdInput.value, checkbox.checked);
+          log(`Model ${modelIdInput.value} search support:`, checkbox.checked);
+          updateSwitchVisibility();
+        }
+      };
+    }
+  }
+
  
-  const observer = new MutationObserver(() => {
+  const switchObserver = new MutationObserver(() => {
     if (document.getElementById('tm-search-toggle-container')) return;
     
     const relativeContainers = document.querySelectorAll('.sm\\:relative');
-    
     let pluginContainer = null;
     relativeContainers.forEach(container => {
       const hasPluginBtn = container.querySelector('[id^="headlessui-menu-button-"]');
@@ -137,10 +246,28 @@
     
     if (pluginContainer) {
       pluginContainer.parentElement.insertBefore(makeSwitch(), pluginContainer.nextSibling);
-      log('Toggle switch injected after plugin selector');
+      log('Toggle switch injected');
+      updateSwitchVisibility();
     }
   });
-  observer.observe(document.body, {subtree: true, childList: true});
+  switchObserver.observe(document.body, {subtree: true, childList: true});
+
+  const modalObserver = new MutationObserver(() => {
+    injectSearchSupportCheckbox();
+  });
+  modalObserver.observe(document.body, {subtree: true, childList: true});
+
+  const storageObserver = new MutationObserver(() => {
+    updateSwitchVisibility();
+  });
+  
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'typingmind_chat_settings') {
+      updateSwitchVisibility();
+    }
+  });
+
+  setInterval(updateSwitchVisibility, 1000);
 
   log('extension loaded');
 })();
