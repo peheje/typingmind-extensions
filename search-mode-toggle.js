@@ -1,10 +1,10 @@
 // == TypingMind Extension: Search-mode toggle =============================
-// v0.3 – 2025-10-13
+// v0.4 – 2025-10-13
 (() => {
 
   const STORAGE_KEY     = 'TM_searchModeOn';
   const SEARCH_SUFFIX   = ':search';
-  const SEND_BTN_SEL    = '[data-element-id="send-button"]'; 
+  const PLUGIN_BTN_SEL  = '[id^="headlessui-menu-button-"]'; // Sélecteur plus flexible
 
   
   const log   = (...m) => console.log('[Search-mode]', ...m);
@@ -31,31 +31,103 @@
   };
 
  
-  function makeButton(template) {
-    const btn = document.createElement('button');
-    btn.id    = 'tm-search-toggle';
-    btn.className = template.className;   
-    btn.style.marginRight = '4px';
-    btn.textContent = '🔍';
-    btn.title = 'Toggle :search sub-model (Alt+S)';
-    const paint = () => {
-      btn.style.backgroundColor = isOn() ? 'rgb(59 130 246)' : '';
-      btn.style.color           = isOn() ? '#fff'            : '';
+  function makeSwitch() {
+    const container = document.createElement('div');
+    container.id = 'tm-search-toggle-container';
+    container.style.cssText = `
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-right: 12px;
+    `;
+    container.title = 'Toggle :search sub-model (Alt+S)';
+
+    const label = document.createElement('span');
+    label.textContent = '🔍';
+    label.style.cssText = `
+      font-size: 16px;
+      user-select: none;
+    `;
+
+    const switchWrapper = document.createElement('label');
+    switchWrapper.style.cssText = `
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+      cursor: pointer;
+    `;
+
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = isOn();
+    input.style.cssText = `
+      opacity: 0;
+      width: 0;
+      height: 0;
+    `;
+
+    const slider = document.createElement('span');
+    slider.style.cssText = `
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      border-radius: 24px;
+      transition: 0.3s;
+    `;
+
+    const knob = document.createElement('span');
+    knob.style.cssText = `
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      border-radius: 50%;
+      transition: 0.3s;
+    `;
+    slider.appendChild(knob);
+
+    const updateSwitch = () => {
+      const active = isOn();
+      input.checked = active;
+      slider.style.backgroundColor = active ? 'rgb(59, 130, 246)' : '#ccc';
+      knob.style.transform = active ? 'translateX(20px)' : 'translateX(0)';
     };
-    btn.onclick = () => { setOn(!isOn()); paint(); };
-    paint();
+
+    input.onchange = () => {
+      setOn(input.checked);
+      updateSwitch();
+    };
+
+    switchWrapper.appendChild(input);
+    switchWrapper.appendChild(slider);
+    
+    container.appendChild(label);
+    container.appendChild(switchWrapper);
+
     document.addEventListener('keydown', e => {
-      if (e.altKey && e.key.toLowerCase() === 's') { btn.click(); }
+      if (e.altKey && e.key.toLowerCase() === 's') {
+        input.checked = !input.checked;
+        input.onchange();
+      }
     });
-    return btn;
+
+    updateSwitch();
+    return container;
   }
 
  
   const observer = new MutationObserver(() => {
-    const send = document.querySelector(SEND_BTN_SEL);
-    if (send && !document.getElementById('tm-search-toggle')) {
-      send.parentElement.insertBefore(makeButton(send), send);
-      log('Toggle button injected');
+    const pluginBtn = document.querySelector(PLUGIN_BTN_SEL);
+    if (pluginBtn && !document.getElementById('tm-search-toggle-container')) {
+      pluginBtn.parentElement.insertBefore(makeSwitch(), pluginBtn);
+      log('Toggle switch injected');
     }
   });
   observer.observe(document.body, {subtree: true, childList: true});
