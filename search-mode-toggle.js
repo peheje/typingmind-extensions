@@ -1,5 +1,5 @@
 // == TypingMind Extension: Search-mode toggle =============================
-// v0.7 – 2025-10-13
+// v0.8 – 2025-10-13
 (() => {
 
   const STORAGE_KEY           = 'TM_searchModeOn';
@@ -19,6 +19,7 @@
     const models = getSearchSupportedModels();
     models[modelId] = supported;
     localStorage.setItem(MODELS_SEARCH_SUPPORT, JSON.stringify(models));
+    log(`Model "${modelId}" search support set to:`, supported);
   };
   const isModelSearchSupported = (modelId) => {
     return getSearchSupportedModels()[modelId] === true;
@@ -163,72 +164,96 @@
     }
   }
 
-  function injectSearchSupportCheckbox() {
-    const modalContent = document.querySelector('[role="dialog"]');
-    if (!modalContent) return;
-
-    const hasModelIdInput = modalContent.querySelector('input[placeholder*="model"]') || 
-                            modalContent.querySelector('label[for*="model"]');
-    if (!hasModelIdInput) return;
-
-    if (modalContent.querySelector('#tm-search-support-checkbox')) return;
-
-    const checkboxContainer = document.createElement('div');
-    checkboxContainer.style.cssText = `
-      margin-top: 16px;
-      padding: 12px;
-      border: 1px solid #e5e7eb;
-      border-radius: 6px;
-      background-color: #f9fafb;
-    `;
+  function createModalSwitch(currentModelId) {
+    const switchContainer = document.createElement('div');
+    switchContainer.className = 'flex items-center justify-start';
+    switchContainer.id = 'tm-search-modal-switch';
 
     const label = document.createElement('label');
-    label.style.cssText = `
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      cursor: pointer;
-      font-size: 14px;
-    `;
+    label.className = 'inline-flex items-center justify-start flex-shrink-0 w-full';
 
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-    checkbox.id = 'tm-search-support-checkbox';
-    checkbox.style.cssText = `
-      width: 16px;
-      height: 16px;
-      cursor: pointer;
-    `;
+    const button = document.createElement('button');
+    button.className = isModelSearchSupported(currentModelId) 
+      ? 'bg-blue-600 h-6 w-11 cursor-default relative inline-flex flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2'
+      : 'custom-plugins-switch-disabled-state bg-gray-200 dark:bg-zinc-700 h-6 w-11 cursor-default relative inline-flex flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2';
+    button.setAttribute('role', 'switch');
+    button.setAttribute('type', 'button');
+    button.setAttribute('tabindex', '0');
+    button.setAttribute('aria-checked', isModelSearchSupported(currentModelId) ? 'true' : 'false');
 
-    const labelText = document.createElement('span');
-    labelText.textContent = '🔍 This model supports :search suffix';
-    labelText.style.cssText = `
-      user-select: none;
-    `;
+    const knob = document.createElement('span');
+    knob.setAttribute('aria-hidden', 'true');
+    knob.className = isModelSearchSupported(currentModelId)
+      ? 'translate-x-5 h-5 w-5 pointer-events-none inline-block transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out'
+      : 'translate-x-0 h-5 w-5 pointer-events-none inline-block transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out';
 
-    label.appendChild(checkbox);
-    label.appendChild(labelText);
-    checkboxContainer.appendChild(label);
+    button.appendChild(knob);
 
-    const formGroups = modalContent.querySelectorAll('div.space-y-4, div.flex.flex-col, form > div');
-    if (formGroups.length > 0) {
-      const targetGroup = formGroups[0];
-      targetGroup.appendChild(checkboxContainer);
-      log('Search support checkbox injected');
+    const textContainer = document.createElement('div');
+    textContainer.className = 'w-full';
 
-      const modelIdInput = modalContent.querySelector('input[name*="model"], input[placeholder*="model"]');
-      if (modelIdInput && modelIdInput.value) {
-        checkbox.checked = isModelSearchSupported(modelIdInput.value);
-      }
+    const title = document.createElement('div');
+    title.className = 'ml-2';
+    title.textContent = 'Support :search Suffix';
 
-      checkbox.onchange = () => {
-        if (modelIdInput && modelIdInput.value) {
-          setModelSearchSupport(modelIdInput.value, checkbox.checked);
-          log(`Model ${modelIdInput.value} search support:`, checkbox.checked);
-          updateSwitchVisibility();
-        }
-      };
-    }
+    const description = document.createElement('div');
+    description.className = 'ml-2 text-gray-500 text-xs w-full';
+    description.textContent = 'Enable if the model supports the ":search" suffix for web search capabilities.';
+
+    textContainer.appendChild(title);
+    textContainer.appendChild(description);
+
+    label.appendChild(button);
+    label.appendChild(textContainer);
+    switchContainer.appendChild(label);
+
+    button.onclick = () => {
+      const isChecked = button.getAttribute('aria-checked') === 'true';
+      const newState = !isChecked;
+      
+      button.setAttribute('aria-checked', newState ? 'true' : 'false');
+      button.className = newState
+        ? 'bg-blue-600 h-6 w-11 cursor-default relative inline-flex flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2'
+        : 'custom-plugins-switch-disabled-state bg-gray-200 dark:bg-zinc-700 h-6 w-11 cursor-default relative inline-flex flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2';
+      knob.className = newState
+        ? 'translate-x-5 h-5 w-5 pointer-events-none inline-block transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out'
+        : 'translate-x-0 h-5 w-5 pointer-events-none inline-block transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out';
+
+      setModelSearchSupport(currentModelId, newState);
+      updateSwitchVisibility();
+    };
+
+    return switchContainer;
+  }
+
+  function injectSearchSupportSwitch() {
+    const modal = document.querySelector('[data-element-id="pop-up-modal"]');
+    if (!modal) return;
+
+    const modalTitle = modal.querySelector('h1');
+    if (!modalTitle || modalTitle.textContent !== 'Edit Custom Model') return;
+
+    if (modal.querySelector('#tm-search-modal-switch')) return;
+
+    const modelIdInput = modal.querySelector('input[placeholder="e.g., ggml-gpt4all-j-v1.3-groovy.bin"]');
+    if (!modelIdInput || !modelIdInput.value) return;
+
+    const currentModelId = modelIdInput.value;
+
+    const capabilitiesSection = Array.from(modal.querySelectorAll('h3')).find(h3 => 
+      h3.textContent === 'Model Capabilities'
+    );
+    
+    if (!capabilitiesSection) return;
+
+    const switchesContainer = capabilitiesSection.closest('.bg-white, .dark\\:bg-gray-800')
+      ?.querySelector('.space-y-3');
+    
+    if (!switchesContainer) return;
+
+    const searchSwitch = createModalSwitch(currentModelId);
+    switchesContainer.appendChild(searchSwitch);
+    log('Search support switch injected into modal');
   }
 
  
@@ -253,14 +278,10 @@
   switchObserver.observe(document.body, {subtree: true, childList: true});
 
   const modalObserver = new MutationObserver(() => {
-    injectSearchSupportCheckbox();
+    injectSearchSupportSwitch();
   });
   modalObserver.observe(document.body, {subtree: true, childList: true});
 
-  const storageObserver = new MutationObserver(() => {
-    updateSwitchVisibility();
-  });
-  
   window.addEventListener('storage', (e) => {
     if (e.key === 'typingmind_chat_settings') {
       updateSwitchVisibility();
