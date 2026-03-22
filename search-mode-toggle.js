@@ -1,6 +1,6 @@
 // == TypingMind Extension: OpenRouter web search toggle ===================
-// Install in TypingMind using:
-// https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@main/search-mode-toggle.js
+// Install in TypingMind using a pinned jsDelivr commit URL, for example:
+// https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/search-mode-toggle.js
 // v0.7 - 2026-03-22
 (() => {
   const STORAGE_KEY = 'TM_openRouterWebSearchOn';
@@ -93,10 +93,17 @@
 
   function findPreferredHost() {
     const thinkingButton = document.querySelector('[data-element-id="toggle-thinking-button"]');
-    if (thinkingButton && thinkingButton.parentElement) return { host: thinkingButton.parentElement, anchor: thinkingButton };
+    if (thinkingButton) {
+      const anchor = thinkingButton.closest('div') || thinkingButton;
+      if (anchor.parentElement) return { host: anchor.parentElement, anchor };
+    }
 
     const newChatButton = document.querySelector('[data-element-id="new-chat-button-in-side-bar"]');
-    if (newChatButton && newChatButton.parentElement) return { host: newChatButton.parentElement, anchor: newChatButton };
+    if (newChatButton) {
+      const anchor = newChatButton.closest('div') || newChatButton;
+      if (anchor.parentElement) return { host: anchor.parentElement, anchor };
+    }
+
     return null;
   }
 
@@ -109,8 +116,12 @@
       container = createToggle();
     }
 
-    if (target.anchor && container.parentElement !== target.host) {
-      target.host.insertBefore(container, target.anchor.nextSibling);
+    if (target.anchor) {
+      const expectedPreviousSibling = target.anchor;
+      const isMountedInRightPlace = container.parentElement === target.host && container.previousSibling === expectedPreviousSibling;
+      if (!isMountedInRightPlace) {
+        target.host.insertBefore(container, target.anchor.nextSibling);
+      }
     }
   }
 
