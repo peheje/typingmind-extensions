@@ -1,146 +1,174 @@
-// == TypingMind Extension: Search-mode toggle =============================
-// v0.6 – 2025-10-13
+// == TypingMind Extension: OpenRouter web search toggle ===================
+// v0.7 - 2026-03-22
 (() => {
+  const STORAGE_KEY = 'TM_openRouterWebSearchOn';
+  const ONLINE_SUFFIX = ':online';
+  const CONTAINER_ID = 'tm-online-toggle-container';
+  const BUTTON_ID = 'tm-online-toggle-button';
 
-  const STORAGE_KEY     = 'TM_searchModeOn';
-  const SEARCH_SUFFIX   = ':search';
+  const log = (...messages) => console.log('[TM Web Search]', ...messages);
+  const isOn = () => localStorage.getItem(STORAGE_KEY) === 'true';
+  const setOn = (value) => localStorage.setItem(STORAGE_KEY, String(Boolean(value)));
 
-  
-  const log   = (...m) => console.log('[Search-mode]', ...m);
-  const isOn  = ()    => localStorage.getItem(STORAGE_KEY) === 'true';
-  const setOn = v     => localStorage.setItem(STORAGE_KEY, v);
+  function updateModelSlug(model, enabled) {
+    if (typeof model !== 'string' || !model) return model;
+    if (enabled) return model.endsWith(ONLINE_SUFFIX) ? model : model + ONLINE_SUFFIX;
+    return model.endsWith(ONLINE_SUFFIX) ? model.slice(0, -ONLINE_SUFFIX.length) : model;
+  }
 
- 
-  const nativeFetch = window.fetch;
-  window.fetch = async function (input, init = {}) {
+  function getRequestUrl(input) {
+    if (typeof input === 'string') return input;
+    if (input instanceof URL) return input.toString();
+    if (input && typeof input.url === 'string') return input.url;
+    return '';
+  }
+
+  function shouldPatchRequest(input, init) {
+    const url = getRequestUrl(input);
+    return /\/chat\/completions(?:[/?#]|$)/.test(url) && init && typeof init.body === 'string';
+  }
+
+  const nativeFetch = window.fetch.bind(window);
+  window.fetch = async function patchedFetch(input, init) {
+    const nextInit = init ? { ...init } : init;
+
     try {
-      if (typeof input === 'string' && /\/chat\/completions/.test(input) && init.body) {
-        const body = JSON.parse(init.body);
-        if (isOn()) {
-          if (!body.model.endsWith(SEARCH_SUFFIX)) body.model += SEARCH_SUFFIX;
-        } else {
-          body.model = body.model.replace(new RegExp(SEARCH_SUFFIX + '$'), '');
+      if (shouldPatchRequest(input, nextInit)) {
+        const body = JSON.parse(nextInit.body);
+        if (body && typeof body === 'object' && typeof body.model === 'string') {
+          body.model = updateModelSlug(body.model, isOn());
+          nextInit.body = JSON.stringify(body);
         }
-        init.body = JSON.stringify(body);
       }
-    } catch (err) {
-      log('fetch patch error', err);
+    } catch (error) {
+      log('fetch patch error', error);
     }
-    return nativeFetch.call(this, input, init);
+
+    return nativeFetch(input, nextInit);
   };
 
- 
-  function makeSwitch() {
+  function getButton() {
+    return document.getElementById(BUTTON_ID);
+  }
+
+  function renderButton() {
+    const button = getButton();
+    if (!button) return;
+
+    const active = isOn();
+    button.setAttribute('aria-pressed', String(active));
+    button.style.background = active ? '#0f766e' : '#f3f4f6';
+    button.style.color = active ? '#ffffff' : '#111827';
+    button.style.borderColor = active ? '#0f766e' : '#d1d5db';
+    button.textContent = active ? 'Web Search: ON' : 'Web Search: OFF';
+  }
+
+  function toggleMode(forceValue) {
+    const nextValue = typeof forceValue === 'boolean' ? forceValue : !isOn();
+    setOn(nextValue);
+    renderButton();
+    log('web search', nextValue ? 'enabled' : 'disabled');
+  }
+
+  function createToggle() {
     const container = document.createElement('div');
-    container.id = 'tm-search-toggle-container';
-    container.style.cssText = `
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      margin-left: 12px;
-    `;
-    container.title = 'Toggle :search sub-model (Alt+S)';
+    container.id = CONTAINER_ID;
+    container.title = 'Toggle OpenRouter web search (:online) (Alt+S)';
 
-    const label = document.createElement('span');
-    label.textContent = '🔍';
-    label.style.cssText = `
-      font-size: 16px;
-      user-select: none;
-    `;
+    const button = document.createElement('button');
+    button.id = BUTTON_ID;
+    button.type = 'button';
+    button.style.cssText = [
+      'width: 100%',
+      'display: inline-flex',
+      'align-items: center',
+      'justify-content: center',
+      'padding: 10px 12px',
+      'border: 1px solid #d1d5db',
+      'border-radius: 12px',
+      'font: 600 13px/1.2 sans-serif',
+      'letter-spacing: 0.02em',
+      'cursor: pointer',
+      'box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08)',
+      'transition: background 120ms ease, color 120ms ease, border-color 120ms ease'
+    ].join(';');
+    button.addEventListener('click', () => toggleMode());
 
-    const switchWrapper = document.createElement('label');
-    switchWrapper.style.cssText = `
-      position: relative;
-      display: inline-block;
-      width: 44px;
-      height: 24px;
-      cursor: pointer;
-    `;
-
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = isOn();
-    input.style.cssText = `
-      opacity: 0;
-      width: 0;
-      height: 0;
-    `;
-
-    const slider = document.createElement('span');
-    slider.style.cssText = `
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background-color: #ccc;
-      border-radius: 24px;
-      transition: 0.3s;
-    `;
-
-    const knob = document.createElement('span');
-    knob.style.cssText = `
-      position: absolute;
-      content: "";
-      height: 18px;
-      width: 18px;
-      left: 3px;
-      bottom: 3px;
-      background-color: white;
-      border-radius: 50%;
-      transition: 0.3s;
-    `;
-    slider.appendChild(knob);
-
-    const updateSwitch = () => {
-      const active = isOn();
-      input.checked = active;
-      slider.style.backgroundColor = active ? 'rgb(59, 130, 246)' : '#ccc';
-      knob.style.transform = active ? 'translateX(20px)' : 'translateX(0)';
-    };
-
-    input.onchange = () => {
-      setOn(input.checked);
-      updateSwitch();
-    };
-
-    switchWrapper.appendChild(input);
-    switchWrapper.appendChild(slider);
-    
-    container.appendChild(label);
-    container.appendChild(switchWrapper);
-
-    document.addEventListener('keydown', e => {
-      if (e.altKey && e.key.toLowerCase() === 's') {
-        input.checked = !input.checked;
-        input.onchange();
-      }
-    });
-
-    updateSwitch();
+    container.appendChild(button);
+    renderButton();
     return container;
   }
 
- 
-  const observer = new MutationObserver(() => {
-    if (document.getElementById('tm-search-toggle-container')) return;
-    
-    const relativeContainers = document.querySelectorAll('.sm\\:relative');
-    
-    let pluginContainer = null;
-    relativeContainers.forEach(container => {
-      const hasPluginBtn = container.querySelector('[id^="headlessui-menu-button-"]');
-      if (hasPluginBtn) {
-        pluginContainer = container;
+  function findPreferredHost() {
+    const newChatButton = document.querySelector('[data-element-id="new-chat-button-in-side-bar"]');
+    if (newChatButton && newChatButton.parentElement) return { host: newChatButton.parentElement, mode: 'sidebar' };
+    if (document.body) return { host: document.body, mode: 'floating' };
+    return null;
+  }
+
+  function applyContainerLayout(container, mode) {
+    if (mode === 'sidebar') {
+      container.style.cssText = 'margin-top: 8px; width: 100%;';
+      return;
+    }
+
+    container.style.cssText = [
+      'position: fixed',
+      'right: 16px',
+      'bottom: 16px',
+      'width: min(220px, calc(100vw - 32px))',
+      'z-index: 2147483647'
+    ].join(';');
+  }
+
+  function mountToggle() {
+    const target = findPreferredHost();
+    if (!target) return;
+
+    let container = document.getElementById(CONTAINER_ID);
+    if (!container) {
+      container = createToggle();
+    }
+
+    applyContainerLayout(container, target.mode);
+
+    if (target.mode === 'sidebar') {
+      const anchor = target.host.querySelector('[data-element-id="new-chat-button-in-side-bar"]');
+      if (anchor && container.parentElement !== target.host) {
+        target.host.insertBefore(container, anchor.nextSibling);
       }
-    });
-    
-    if (pluginContainer) {
-      pluginContainer.parentElement.insertBefore(makeSwitch(), pluginContainer.nextSibling);
-      log('Toggle switch injected after plugin selector');
+      return;
+    }
+
+    if (container.parentElement !== document.body) {
+      document.body.appendChild(container);
+    }
+  }
+
+  document.addEventListener('keydown', (event) => {
+    if (event.altKey && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      toggleMode();
     }
   });
-  observer.observe(document.body, {subtree: true, childList: true});
 
-  log('extension loaded');
+  const observer = new MutationObserver(() => {
+    mountToggle();
+    renderButton();
+  });
+
+  function start() {
+    mountToggle();
+    renderButton();
+    if (document.body) {
+      observer.observe(document.body, { subtree: true, childList: true });
+    }
+    log('extension loaded');
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', start, { once: true });
+  } else {
+    start();
+  }
 })();
