@@ -91,15 +91,25 @@
     return container;
   }
 
+  function isUsableAnchorElement(element) {
+    if (!element) return false;
+    if (element.closest('[inert]')) return false;
+    if (element.closest('[aria-hidden="true"]')) return false;
+    return Boolean(element.closest('[data-element-id="chat-input-actions"]'));
+  }
+
   function findPreferredHost() {
-    const thinkingButton = document.querySelector('[data-element-id="toggle-thinking-button"]');
-    if (thinkingButton) {
+    const thinkingButtons = document.querySelectorAll('[data-element-id="toggle-thinking-button"]');
+    for (const thinkingButton of thinkingButtons) {
+      if (!isUsableAnchorElement(thinkingButton)) continue;
       const anchor = thinkingButton.closest('div') || thinkingButton;
       if (anchor.parentElement) return { host: anchor.parentElement, anchor };
     }
 
-    const newChatButton = document.querySelector('[data-element-id="new-chat-button-in-side-bar"]');
-    if (newChatButton) {
+    const newChatButtons = document.querySelectorAll('[data-element-id="new-chat-button-in-side-bar"]');
+    for (const newChatButton of newChatButtons) {
+      if (newChatButton.closest('[inert]')) continue;
+      if (newChatButton.closest('[aria-hidden="true"]')) continue;
       const anchor = newChatButton.closest('div') || newChatButton;
       if (anchor.parentElement) return { host: anchor.parentElement, anchor };
     }
@@ -133,9 +143,7 @@
   });
 
   const observer = new MutationObserver(() => {
-    if (!document.getElementById(CONTAINER_ID)) {
-      mountToggle();
-    }
+    mountToggle();
   });
 
   function start() {
