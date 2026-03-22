@@ -1,15 +1,13 @@
 // == TypingMind Extension: OpenRouter web search toggle ===================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/search-mode-toggle.js
-// v0.9 - 2026-03-22
+// v0.10 - 2026-03-22
 (() => {
   const STORAGE_KEY = 'TM_openRouterWebSearchOn';
   const MODEL_SUFFIX = ':online';
   const CONTAINER_ID = 'tm-online-toggle-container';
   const BUTTON_ID = 'tm-online-toggle-button';
-  const TITLE_CHAT_HISTORY_MARKER = '<CHAT_HISTORY>';
-  const TITLE_PROMPT_PATTERN = /generate a short and relevant title for this chat|generate[^\n]+title[^\n]+chat/i;
-  const TITLE_OUTPUT_PATTERN = /strictly answer with only the title|only the title|no other text is allowed/i;
+  const TITLE_REQUEST_MARKER = '[[tm-title-no-online]]';
 
   const CHAT_COMPLETIONS_URL_PATTERN = /\/chat\/completions(?:[/?#]|$)/;
   const CHAT_INPUT_ACTIONS_SELECTOR = '[data-element-id="chat-input-actions"]';
@@ -85,6 +83,61 @@
     return content.map(getTextFromContentPart).filter(Boolean).join('\n');
   }
 
+  function stripTitleRequestMarker(text) {
+    if (typeof text !== 'string' || !text.includes(TITLE_REQUEST_MARKER)) {
+      return text;
+    }
+
+    return text
+      .replace(TITLE_REQUEST_MARKER, '')
+      .replace(/^\s+/, '');
+  }
+
+  function stripTitleRequestMarkerFromContent(content) {
+    if (typeof content === 'string') {
+      return stripTitleRequestMarker(content);
+    }
+
+    if (!Array.isArray(content)) {
+      return content;
+    }
+
+    return content.map((part) => {
+      if (typeof part === 'string') {
+        return stripTitleRequestMarker(part);
+      }
+
+      if (!part || typeof part !== 'object') {
+        return part;
+      }
+
+      if (typeof part.text === 'string') {
+        return { ...part, text: stripTitleRequestMarker(part.text) };
+      }
+
+      if (typeof part.content === 'string') {
+        return { ...part, content: stripTitleRequestMarker(part.content) };
+      }
+
+      return part;
+    });
+  }
+
+  function stripTitleRequestMarkerFromMessages(messages) {
+    if (!Array.isArray(messages)) return messages;
+
+    return messages.map((message) => {
+      if (!message || typeof message !== 'object') {
+        return message;
+      }
+
+      return {
+        ...message,
+        content: stripTitleRequestMarkerFromContent(message.content)
+      };
+    });
+  }
+
   function isLikelyTitleGenerationRequest(body) {
     if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
       return false;
@@ -100,11 +153,7 @@
       return false;
     }
 
-    return Boolean(
-      combinedText.includes(TITLE_CHAT_HISTORY_MARKER) &&
-      TITLE_PROMPT_PATTERN.test(combinedText) &&
-      TITLE_OUTPUT_PATTERN.test(combinedText)
-    );
+    return combinedText.includes(TITLE_REQUEST_MARKER);
   }
 
   function patchRequestBody(bodyText) {
@@ -114,10 +163,15 @@
     }
 
     const webSearchEnabled = isWebSearchEnabled();
-    const shouldEnableOnline = webSearchEnabled && !isLikelyTitleGenerationRequest(body);
+    const isTitleGenerationRequest = isLikelyTitleGenerationRequest(body);
+    const shouldEnableOnline = webSearchEnabled && !isTitleGenerationRequest;
 
     if (webSearchEnabled && !shouldEnableOnline) {
       log('skipping web search for title-generation request');
+    }
+
+    if (isTitleGenerationRequest) {
+      body.messages = stripTitleRequestMarkerFromMessages(body.messages);
     }
 
     body.model = updateModelSlug(body.model, shouldEnableOnline);
