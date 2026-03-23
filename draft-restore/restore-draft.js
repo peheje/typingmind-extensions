@@ -1,7 +1,7 @@
 // == TypingMind Extension: Restore chat input draft ========================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/draft-restore/restore-draft.js
-// v0.1 - 2026-03-23
+// v0.2 - 2026-03-23
 (() => {
   const STORAGE_KEY = 'TM_chatInputDraft';
   const TEXTAREA_SELECTOR = '[data-element-id="chat-input-textbox"]';
@@ -15,6 +15,11 @@
 
   const log = (...messages) => console.log('[TM Draft Restore]', ...messages);
 
+  function normalizeDraftValue(value) {
+    if (typeof value !== 'string') return '';
+    return value.trim().length > 0 ? value : '';
+  }
+
   function readDraft() {
     try {
       return localStorage.getItem(STORAGE_KEY) || '';
@@ -26,8 +31,10 @@
 
   function writeDraft(value) {
     try {
-      if (typeof value === 'string' && value.trim().length > 0) {
-        localStorage.setItem(STORAGE_KEY, value);
+      const normalizedValue = normalizeDraftValue(value);
+
+      if (normalizedValue) {
+        localStorage.setItem(STORAGE_KEY, normalizedValue);
       } else {
         localStorage.removeItem(STORAGE_KEY);
       }
@@ -57,8 +64,17 @@
     textarea.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
+  function isStaleTextarea(textarea) {
+    return Boolean(textarea && textarea !== getTextarea() && !textarea.isConnected);
+  }
+
   function persistTextareaValue(textarea = getTextarea()) {
-    if (!textarea) return;
+    if (!textarea || isStaleTextarea(textarea)) return;
+
+    if (saveTimerId) {
+      window.clearTimeout(saveTimerId);
+      saveTimerId = null;
+    }
 
     const value = textarea.value;
 
@@ -78,13 +94,18 @@
       window.clearTimeout(saveTimerId);
     }
 
-    if (textarea.value.length === 0) {
+    if (normalizeDraftValue(textarea.value) === '') {
       persistTextareaValue(textarea);
       return;
     }
 
     saveTimerId = window.setTimeout(() => {
       saveTimerId = null;
+
+      if (isStaleTextarea(textarea)) {
+        return;
+      }
+
       persistTextareaValue(textarea);
     }, SAVE_DELAY_MS);
   }
@@ -93,7 +114,7 @@
     if (!textarea || textarea.value.length > 0) return;
 
     const draft = readDraft();
-    if (!draft || draft.trim().length === 0) return;
+    if (!normalizeDraftValue(draft)) return;
 
     setTextareaValue(textarea, draft);
 
@@ -115,6 +136,7 @@
     textarea.setAttribute(BOUND_ATTRIBUTE, 'true');
     textarea.addEventListener('input', () => schedulePersist(textarea));
     textarea.addEventListener('change', () => persistTextareaValue(textarea));
+    textarea.addEventListener('blur', () => persistTextareaValue(textarea));
 
     restoreDraftIfTextareaIsEmpty(textarea);
     lastBoundTextarea = textarea;
@@ -195,7 +217,7 @@
   });
 
   function handlePageHide() {
-    const textarea = getTextarea() || lastBoundTextarea;
+    const textarea = getTextarea() || (lastBoundTextarea && lastBoundTextarea.isConnected ? lastBoundTextarea : null);
     persistTextareaValue(textarea);
   }
 
