@@ -9,6 +9,7 @@
 
   const CHAT_COMPLETIONS_URL_PATTERN = /\/chat\/completions(?:[/?#]|$)/;
   const CHAT_INPUT_ACTIONS_SELECTOR = '[data-element-id="chat-input-actions"]';
+  const SEARCH_TOGGLE_CONTAINER_SELECTOR = '#tm-online-toggle-container';
   const THINKING_BUTTON_SELECTOR = '[data-element-id="toggle-thinking-button"]';
   const SIDEBAR_BUTTON_SELECTOR = '[data-element-id="new-chat-button-in-side-bar"]';
 
@@ -264,8 +265,14 @@
       return null;
     }
 
+    function getSearchToggleAnchor() {
+      const el = document.querySelector(SEARCH_TOGGLE_CONTAINER_SELECTOR);
+      if (!el || isHiddenClone(el) || !el.parentElement) return null;
+      return { host: el.parentElement, anchor: el };
+    }
+
     function findTarget() {
-      return getAnchorTarget(THINKING_BUTTON_SELECTOR, true) || getAnchorTarget(SIDEBAR_BUTTON_SELECTOR, false);
+      return getSearchToggleAnchor() || getAnchorTarget(THINKING_BUTTON_SELECTOR, true) || getAnchorTarget(SIDEBAR_BUTTON_SELECTOR, false);
     }
 
     function mount() {

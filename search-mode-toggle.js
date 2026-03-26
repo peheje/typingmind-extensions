@@ -489,11 +489,9 @@
       if (!target) return;
 
       const container = ui.getOrCreateContainer();
-      const isAlreadyMounted = container.parentElement === target.host && container.previousSibling === target.anchor;
+      if (container.parentElement === target.host) return;
 
-      if (!isAlreadyMounted) {
-        target.host.insertBefore(container, target.anchor.nextSibling);
-      }
+      target.host.insertBefore(container, target.anchor.nextSibling);
     }
 
     return { mount };
