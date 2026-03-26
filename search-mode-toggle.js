@@ -383,6 +383,12 @@
         longPressTimerId = null;
       }
 
+      function clearSuppressedClickSoon() {
+        window.setTimeout(() => {
+          suppressNextClick = false;
+        }, 0);
+      }
+
       button.id = BUTTON_ID;
       button.type = 'button';
       button.className = BUTTON_CLASS_NAME;
@@ -402,8 +408,17 @@
       });
 
       button.addEventListener('pointerup', clearLongPressTimer);
-      button.addEventListener('pointercancel', clearLongPressTimer);
-      button.addEventListener('pointerleave', clearLongPressTimer);
+      button.addEventListener('pointerup', () => {
+        clearSuppressedClickSoon();
+      });
+      button.addEventListener('pointercancel', () => {
+        clearLongPressTimer();
+        clearSuppressedClickSoon();
+      });
+      button.addEventListener('pointerleave', () => {
+        clearLongPressTimer();
+        clearSuppressedClickSoon();
+      });
 
       button.addEventListener('click', (event) => {
         if (suppressNextClick) {
