@@ -105,7 +105,8 @@
   function normalizeStoredMode(value) {
     if (value === CACHE_MODE.STANDARD) return CACHE_MODE.STANDARD;
     if (value === CACHE_MODE.EXTENDED) return CACHE_MODE.EXTENDED;
-    return CACHE_MODE.OFF;
+    if (value === CACHE_MODE.OFF) return CACHE_MODE.OFF;
+    return CACHE_MODE.STANDARD;
   }
 
   function getCacheControl(mode) {
