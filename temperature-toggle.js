@@ -52,13 +52,11 @@
   const BUTTON_CONTENT = `
     <span class="sr-only">Temperature</span>
     <svg class="w-5 h-5 flex-shrink-0" width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M9 2.5V11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-      <path d="M9 11C7.067 11 5.5 12.567 5.5 14.5C5.5 16.433 7.067 18 9 18C10.933 18 12.5 16.433 12.5 14.5C12.5 12.567 10.933 11 9 11Z" fill="currentColor" opacity="0.3"/>
-      <path d="M12 14.5C12 15.163 11.7366 15.7989 11.2678 16.2678C10.7989 16.7366 10.163 17 9.5 17C8.83696 17 8.20107 16.7366 7.73223 16.2678C7.26339 15.7989 7 15.163 7 14.5C7 13.5 7.5 12.5 9.5 11.5C9.5 11.5 12 13.5 12 14.5Z" fill="currentColor"/>
-      <path d="M11 2.5H7" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
-      <path d="M10.5 4.5H7.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
-      <path d="M11 6.5H7" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
-      <path d="M10.5 8.5H7.5" stroke="currentColor" stroke-width="1" stroke-linecap="round" opacity="0.5"/>
+      <path d="M10.5 11.08V4a1.5 1.5 0 1 0-3 0v7.08A3.5 3.5 0 1 0 10.5 11.08Z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="9" cy="13.5" r="1.5" fill="currentColor"/>
+      <path d="M9 11.5V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+      <path d="M12.5 5H14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
+      <path d="M12.5 7.5H13.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity="0.5"/>
     </svg>
     <span data-tm-temp-badge="true" aria-hidden="true" style="position:absolute;top:2px;right:2px;min-width:16px;height:16px;padding:0 3px;border-radius:9999px;font-size:9px;line-height:16px;font-weight:700;display:none;align-items:center;justify-content:center;pointer-events:none;"></span>
   `;
