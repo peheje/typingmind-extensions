@@ -78,14 +78,14 @@
       tooltip: 'Prompt cache is on (standard). Click to switch to extended (1h). Alt+C to cycle.',
       title: 'Prompt cache standard',
       buttonStyle: Object.freeze({
-        backgroundColor: 'transparent',
-        color: '',
+        backgroundColor: '#2563eb',
+        color: '#ffffff',
         boxShadow: ''
       }),
       badge: Object.freeze({
         text: 'ON',
-        backgroundColor: 'rgba(0, 0, 0, 0.12)',
-        color: 'inherit'
+        backgroundColor: '#ffffff',
+        color: '#2563eb'
       })
     }),
     [CACHE_MODE.EXTENDED]: Object.freeze({
