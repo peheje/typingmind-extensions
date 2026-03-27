@@ -1,12 +1,21 @@
 // == TypingMind Extension: Restore new-chat draft ===========================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/draft-restore/restore-draft.js
-// v0.4 - 2026-03-27
+// v0.5 - 2026-03-27
+//
+// TypingMind handles drafts for chats that already have messages, but not for
+// fresh/new chats. This extension saves the textarea globally and restores it
+// when the textarea is empty (i.e. TM did not restore its own draft).
+// Because TM is an SPA that always sets #chat=<id>, we cannot rely on the URL
+// to distinguish new from existing chats. Instead we simply always save and
+// only restore into an empty textarea — if TM already filled it, we stay out
+// of the way.
 (() => {
   const STORAGE_KEY = 'TM_chatInputDraft';
   const TEXTAREA_SELECTOR = '[data-element-id="chat-input-textbox"]';
   const BOUND_ATTRIBUTE = 'data-tm-draft-restore-bound';
   const SAVE_DELAY_MS = 300;
+  const RESTORE_DELAY_MS = 150;
   const CHAT_COMPLETIONS_URL_PATTERN = /\/chat\/completions(?:[/?#]|$)/;
 
   let saveTimerId = null;
@@ -14,11 +23,6 @@
   let lastSentDraft = '';
 
   const log = (...messages) => console.log('[TM Draft Restore]', ...messages);
-
-  function isNewChat() {
-    const hash = window.location.hash || '';
-    return !hash.startsWith('#chat=');
-  }
 
   function readDraft() {
     try {
@@ -66,7 +70,6 @@
 
   function persistTextareaValue(textarea = getTextarea()) {
     if (!textarea || isStaleTextarea(textarea)) return;
-    if (!isNewChat()) return;
 
     if (saveTimerId) {
       window.clearTimeout(saveTimerId);
@@ -81,8 +84,6 @@
   }
 
   function schedulePersist(textarea) {
-    if (!isNewChat()) return;
-
     if (saveTimerId) {
       window.clearTimeout(saveTimerId);
     }
@@ -100,18 +101,26 @@
 
   function restoreDraft(textarea = getTextarea()) {
     if (!textarea || textarea.value.length > 0) return;
-    if (!isNewChat()) return;
 
     const draft = readDraft();
     if (!draft) return;
 
     setTextareaValue(textarea, draft);
+    log('restored draft');
 
     try {
       textarea.setSelectionRange(draft.length, draft.length);
     } catch (_error) {
       // Ignore selection errors.
     }
+  }
+
+  function restoreDraftAfterDelay(textarea = getTextarea()) {
+    // Give TM a moment to fill the textarea with its own draft for existing chats.
+    // If the textarea is still empty after the delay, restore ours.
+    setTimeout(() => {
+      if (textarea && textarea.isConnected) restoreDraft(textarea);
+    }, RESTORE_DELAY_MS);
   }
 
   function bindTextarea(textarea) {
@@ -126,7 +135,7 @@
     textarea.addEventListener('input', () => schedulePersist(textarea));
     textarea.addEventListener('blur', () => persistTextareaValue(textarea));
 
-    restoreDraft(textarea);
+    restoreDraftAfterDelay(textarea);
     lastBoundTextarea = textarea;
     log('textarea bound');
   }
@@ -206,14 +215,6 @@
     persistTextareaValue(textarea);
   }
 
-  function handleHashChange() {
-    // When navigating to a new chat, try to restore the draft into the textarea.
-    // Clearing happens only on send (fetch intercept) or when the user empties the textarea.
-    if (isNewChat()) {
-      restoreDraft();
-    }
-  }
-
   function start() {
     bindTextarea(getTextarea());
 
@@ -223,7 +224,6 @@
 
     window.addEventListener('pagehide', handlePageHide);
     window.addEventListener('beforeunload', handlePageHide);
-    window.addEventListener('hashchange', handleHashChange);
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') handlePageHide();
     });
