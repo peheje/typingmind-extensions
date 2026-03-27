@@ -62,11 +62,15 @@
       tooltip: 'Prompt cache is off. Click to enable standard caching. Alt+C to cycle.',
       title: 'Prompt cache off',
       buttonStyle: Object.freeze({
-        backgroundColor: 'transparent',
-        color: '',
+        backgroundColor: '#ca8a04',
+        color: '#ffffff',
         boxShadow: ''
       }),
-      badge: null
+      badge: Object.freeze({
+        text: 'OFF',
+        backgroundColor: '#ffffff',
+        color: '#ca8a04'
+      })
     }),
     [CACHE_MODE.STANDARD]: Object.freeze({
       pressed: true,
@@ -74,14 +78,14 @@
       tooltip: 'Prompt cache is on (standard). Click to switch to extended (1h). Alt+C to cycle.',
       title: 'Prompt cache standard',
       buttonStyle: Object.freeze({
-        backgroundColor: '#ca8a04',
-        color: '#ffffff',
+        backgroundColor: 'transparent',
+        color: '',
         boxShadow: ''
       }),
       badge: Object.freeze({
         text: 'ON',
-        backgroundColor: '#ffffff',
-        color: '#ca8a04'
+        backgroundColor: 'rgba(0, 0, 0, 0.12)',
+        color: 'inherit'
       })
     }),
     [CACHE_MODE.EXTENDED]: Object.freeze({
