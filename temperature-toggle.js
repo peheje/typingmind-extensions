@@ -20,10 +20,10 @@
 
   const TEMP = Object.freeze({
     OFF: 'off',
-    ZERO: '0',
+    ZERO: '0.0',
     LOW: '0.3',
     BALANCED: '0.7',
-    CREATIVE: '1'
+    CREATIVE: '1.0'
   });
 
   const TEMP_ORDER = [TEMP.OFF, TEMP.ZERO, TEMP.LOW, TEMP.BALANCED, TEMP.CREATIVE];
@@ -145,6 +145,8 @@
   const log = (...messages) => console.log('[TM Temperature]', ...messages);
 
   function normalizeStoredTemp(value) {
+    if (value === '0') return TEMP.ZERO;
+    if (value === '1') return TEMP.CREATIVE;
     if (TEMP_ORDER.includes(value) && value !== TEMP.OFF) return value;
     return TEMP.OFF;
   }
