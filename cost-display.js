@@ -2,18 +2,20 @@
 // Intercepts streaming responses to capture usage/cost data from OpenRouter
 // and displays it inline after each assistant message.
 // Persists cost data in localStorage keyed by message UUID.
-// v0.2 - 2026-03-28
+// v0.3 - 2026-03-28
 (() => {
   const PREFIX = '[cost-display]';
   const log = (...args) => console.log(PREFIX, ...args);
   const warn = (...args) => console.warn(PREFIX, ...args);
 
   const STORAGE_KEY = 'TM_costDisplayData';
+  const LABELS_VISIBLE_KEY = 'TM_costDisplayShowLabels';
   const CHAT_COMPLETIONS_URL_PATTERN = /\/chat\/completions(?:[/?#]|$)/;
   const TITLE_GEN_MARKER = '[[tm-title-gen]]';
+  const TOP_BAR_BUTTON_ID = 'tm-cost-topbar-button';
 
   // ---------------------------------------------------------------------------
-  // Storage: { [messageUuid]: { cost, prompt_tokens, completion_tokens, model, provider } }
+  // Storage
   // ---------------------------------------------------------------------------
 
   function loadStore() {
@@ -34,8 +36,12 @@
     }
   }
 
-  function getEntry(uuid) {
-    return loadStore()[uuid] || null;
+  function areLabelsVisible() {
+    return localStorage.getItem(LABELS_VISIBLE_KEY) !== 'false';
+  }
+
+  function setLabelsVisible(visible) {
+    localStorage.setItem(LABELS_VISIBLE_KEY, String(visible));
   }
 
   // ---------------------------------------------------------------------------
@@ -86,8 +92,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // SSE stream parser — wraps a ReadableStream, passes bytes through unchanged,
-  // and calls onUsage(data) when the usage chunk is found.
+  // SSE stream parser
   // ---------------------------------------------------------------------------
 
   function wrapStreamForUsage(readableStream, onUsage) {
@@ -143,7 +148,7 @@
   }
 
   // ---------------------------------------------------------------------------
-  // UI: inject cost labels
+  // Formatting
   // ---------------------------------------------------------------------------
 
   function formatCost(cost) {
@@ -161,23 +166,19 @@
 
   function buildCostText(data) {
     const parts = [];
-
-    if (data.cost != null) {
-      parts.push(formatCost(data.cost));
-    }
-
+    if (data.cost != null) parts.push(formatCost(data.cost));
     if (data.prompt_tokens != null || data.completion_tokens != null) {
       const p = formatTokens(data.prompt_tokens) || '?';
       const c = formatTokens(data.completion_tokens) || '?';
       parts.push(`${p} → ${c}`);
     }
-
-    if (data.provider) {
-      parts.push(data.provider);
-    }
-
+    if (data.provider) parts.push(data.provider);
     return parts.join(' · ');
   }
+
+  // ---------------------------------------------------------------------------
+  // Per-message labels
+  // ---------------------------------------------------------------------------
 
   const LABEL_STYLE = [
     'font-size: 11px',
@@ -190,8 +191,11 @@
   ].join(';');
 
   function injectLabelForElement(el, text) {
-    if (el.querySelector('[data-tm-cost-label]')) {
-      el.querySelector('[data-tm-cost-label]').textContent = text;
+    const visible = areLabelsVisible();
+    const existing = el.querySelector('[data-tm-cost-label]');
+    if (existing) {
+      existing.textContent = text;
+      existing.style.display = visible ? '' : 'none';
       return;
     }
 
@@ -199,15 +203,23 @@
     label.setAttribute('data-tm-cost-label', 'true');
     label.textContent = text;
     label.style.cssText = LABEL_STYLE;
+    if (!visible) label.style.display = 'none';
     el.appendChild(label);
   }
 
-  // Restore labels for all visible ai-response elements that have stored data
+  function applyLabelVisibility() {
+    const visible = areLabelsVisible();
+    const labels = document.querySelectorAll('[data-tm-cost-label]');
+    for (const label of labels) {
+      label.style.display = visible ? '' : 'none';
+    }
+  }
+
   function restoreAllLabels() {
     const store = loadStore();
     const responses = document.querySelectorAll('[data-element-id="ai-response"][data-message-uuid]');
     for (const el of responses) {
-      if (el.querySelector('[data-tm-cost-label]')) continue; // already has label
+      if (el.querySelector('[data-tm-cost-label]')) continue;
       const uuid = el.getAttribute('data-message-uuid');
       const data = store[uuid];
       if (data) {
@@ -215,16 +227,21 @@
         if (text) injectLabelForElement(el, text);
       }
     }
-    updateChatTotal();
+    updateTopBarButton();
+  }
+
+  function injectCostLabelOnLast(text) {
+    const responses = document.querySelectorAll('[data-element-id="ai-response"]');
+    if (responses.length === 0) return false;
+    injectLabelForElement(responses[responses.length - 1], text);
+    return true;
   }
 
   // ---------------------------------------------------------------------------
-  // Chat total: sum costs of all messages visible in the current chat
+  // Top bar button: shows chat total, toggles per-message labels
   // ---------------------------------------------------------------------------
 
-  const TOTAL_ID = 'tm-cost-chat-total';
-
-  function updateChatTotal() {
+  function computeChatTotal() {
     const store = loadStore();
     const responses = document.querySelectorAll('[data-element-id="ai-response"][data-message-uuid]');
     let totalCost = 0;
@@ -243,54 +260,77 @@
       }
     }
 
-    // Find the chat date info bar to insert after
-    const dateInfo = document.querySelector('[data-element-id="chat-date-info"]');
-    let container = document.getElementById(TOTAL_ID);
+    return { totalCost, totalPrompt, totalCompletion, count };
+  }
+
+  function updateTopBarButton() {
+    const { totalCost, totalPrompt, totalCompletion, count } = computeChatTotal();
+    let btn = document.getElementById(TOP_BAR_BUTTON_ID);
 
     if (count === 0) {
-      if (container) container.remove();
+      if (btn) btn.remove();
       return;
     }
 
-    const parts = [];
-    parts.push(`Chat total: ${formatCost(totalCost)}`);
-    parts.push(`${formatTokens(totalPrompt)} → ${formatTokens(totalCompletion)}`);
-    parts.push(`${count} messages`);
-    const text = parts.join(' · ');
+    const costText = formatCost(totalCost) || '$0';
+    const tooltip = [
+      `Chat total: ${costText}`,
+      `${formatTokens(totalPrompt)} → ${formatTokens(totalCompletion)}`,
+      `${count} message${count !== 1 ? 's' : ''}`,
+      areLabelsVisible() ? 'Click to hide per-message costs' : 'Click to show per-message costs'
+    ].join(' · ');
 
-    if (container) {
-      container.textContent = text;
+    if (btn) {
+      const span = btn.querySelector('span');
+      if (span) span.textContent = costText;
+      btn.setAttribute('data-tooltip-content', tooltip);
+      btn.setAttribute('title', tooltip);
+      btn.style.opacity = areLabelsVisible() ? '1' : '0.5';
       return;
     }
 
-    if (!dateInfo) return;
+    // Find anchor: the "About this chat" button in the top bar
+    const aboutBtn = document.querySelector(
+      '[data-element-id="current-chat-title"] [data-tooltip-content="About this chat"]'
+    );
+    if (!aboutBtn) return;
 
-    container = document.createElement('div');
-    container.id = TOTAL_ID;
-    container.textContent = text;
-    container.style.cssText = [
-      'font-size: 11px',
-      'color: #8899a6',
-      'text-align: center',
-      'padding: 2px 0 6px',
-      'font-family: ui-monospace, monospace',
-      'opacity: 0.8',
-      'user-select: all',
-      'max-width: 750px',
-      'margin: 0 auto'
-    ].join(';');
+    btn = document.createElement('button');
+    btn.id = TOP_BAR_BUTTON_ID;
+    btn.className = [
+      'gap-2 h-9 w-auto px-2 rounded-lg',
+      'text-slate-900 dark:text-white',
+      'inline-flex items-center justify-center shrink-0 relative',
+      'dark:hover:bg-white/20 dark:active:bg-white/25',
+      'hover:bg-slate-900/20 active:bg-slate-900/25',
+      'focus-visible:outline-offset-2 focus-visible:outline-slate-500',
+      'transition-all'
+    ].join(' ');
+    btn.setAttribute('data-tooltip-id', 'global');
+    btn.setAttribute('data-tooltip-content', tooltip);
+    btn.setAttribute('title', tooltip);
+    btn.style.opacity = areLabelsVisible() ? '1' : '0.5';
 
-    dateInfo.insertAdjacentElement('afterend', container);
+    const span = document.createElement('span');
+    span.className = 'text-slate-500 dark:text-slate-400 text-xs font-normal';
+    span.style.fontFamily = 'ui-monospace, monospace';
+    span.textContent = costText;
+    btn.appendChild(span);
+
+    btn.addEventListener('click', () => {
+      const nowVisible = !areLabelsVisible();
+      setLabelsVisible(nowVisible);
+      applyLabelVisibility();
+      updateTopBarButton();
+      log('labels', nowVisible ? 'shown' : 'hidden');
+    });
+
+    aboutBtn.insertAdjacentElement('beforebegin', btn);
   }
 
-  // Inject label on the last ai-response (used right after a response finishes)
-  function injectCostLabelOnLast(text) {
-    const responses = document.querySelectorAll('[data-element-id="ai-response"]');
-    if (responses.length === 0) return false;
-    const lastResponse = responses[responses.length - 1];
-    injectLabelForElement(lastResponse, text);
-    return true;
-  }
+  // ---------------------------------------------------------------------------
+  // showUsage: called when stream parser finds usage data
+  // ---------------------------------------------------------------------------
 
   function showUsage(parsed) {
     const usage = parsed.usage;
@@ -310,11 +350,9 @@
 
     log('usage:', data);
 
-    // Inject into DOM with retries (DOM may not be ready yet)
     let attempts = 0;
     const tryInject = () => {
       if (injectCostLabelOnLast(text)) {
-        // Now find the UUID from the element we just injected into, and persist
         const responses = document.querySelectorAll('[data-element-id="ai-response"]');
         const lastResponse = responses[responses.length - 1];
         if (lastResponse) {
@@ -322,7 +360,7 @@
           if (uuid) {
             saveEntry(uuid, data);
             log('saved cost for message', uuid);
-            updateChatTotal();
+            updateTopBarButton();
           }
         }
         return;
@@ -382,12 +420,12 @@
 
   let restoreTimer = null;
   const observer = new MutationObserver((mutations) => {
-    // Ignore mutations caused by our own label injection
+    // Ignore mutations caused by our own elements
     const selfCaused = mutations.every((m) => {
       for (const node of m.addedNodes) {
         if (node.nodeType === 1 && (
           node.hasAttribute?.('data-tm-cost-label') ||
-          node.id === TOTAL_ID
+          node.id === TOP_BAR_BUTTON_ID
         )) continue;
         return false;
       }
@@ -395,7 +433,6 @@
     });
     if (selfCaused) return;
 
-    // Debounce to avoid hot loops
     if (restoreTimer) return;
     restoreTimer = setTimeout(() => {
       restoreTimer = null;
