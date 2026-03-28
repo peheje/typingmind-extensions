@@ -64,15 +64,18 @@
 
   function wrapStreamForUsage(readableStream, onUsage) {
     let lineBuf = '';
+    let chunkCount = 0;
 
     const transform = new TransformStream({
       transform(chunk, controller) {
         // Always pass through unchanged
         controller.enqueue(chunk);
+        chunkCount++;
 
         // Also parse for usage data
         try {
           const text = new TextDecoder().decode(chunk, { stream: true });
+          if (chunkCount <= 2) log('stream chunk #' + chunkCount + ' (first 200):', text.slice(0, 200));
           lineBuf += text;
 
           // Process complete lines
@@ -88,12 +91,8 @@
             try {
               const parsed = JSON.parse(json);
               // Usage chunk: choices is empty array, usage object present
-              if (
-                parsed.usage &&
-                typeof parsed.usage === 'object' &&
-                Array.isArray(parsed.choices) &&
-                parsed.choices.length === 0
-              ) {
+              if (parsed.usage && typeof parsed.usage === 'object') {
+                log('found usage in chunk:', JSON.stringify(parsed.usage));
                 onUsage(parsed);
               }
             } catch {
@@ -112,12 +111,8 @@
           if (trimmed.startsWith('data: ') && trimmed !== 'data: [DONE]') {
             try {
               const parsed = JSON.parse(trimmed.slice(6));
-              if (
-                parsed.usage &&
-                typeof parsed.usage === 'object' &&
-                Array.isArray(parsed.choices) &&
-                parsed.choices.length === 0
-              ) {
+              if (parsed.usage && typeof parsed.usage === 'object') {
+                log('found usage in chunk:', JSON.stringify(parsed.usage));
                 onUsage(parsed);
               }
             } catch {
@@ -249,40 +244,36 @@
 
     // Inject usage: { include: true } into request
     nextInit.body = patchRequestBody(nextInit.body);
+    log('patched request, url:', getRequestUrl(input));
 
     const response = await nativeFetch(input, nextInit);
 
-    // Only wrap streaming responses
+    log(
+      'response ok:', response.ok,
+      'status:', response.status,
+      'has body:', !!response.body,
+      'content-type:', response.headers.get('content-type')
+    );
+
     if (!response.body || !response.ok) {
       return response;
     }
 
-    // Check if it's actually a streaming response
-    const contentType = response.headers.get('content-type') || '';
-    if (!contentType.includes('text/event-stream')) {
-      // Non-streaming: try to read usage from JSON response
-      // Clone to avoid consuming the body
-      try {
-        const clone = response.clone();
-        clone.json().then((data) => {
-          if (data && data.usage) {
-            showUsage(data);
-          }
-        }).catch(() => {});
-      } catch {}
+    // Wrap the body to intercept usage chunk (works for both streaming and non-streaming)
+    try {
+      const wrappedBody = wrapStreamForUsage(response.body, (parsed) => {
+        showUsage(parsed);
+      });
+
+      return new Response(wrappedBody, {
+        status: response.status,
+        statusText: response.statusText,
+        headers: response.headers
+      });
+    } catch (err) {
+      warn('failed to wrap stream:', err);
       return response;
     }
-
-    // Streaming: wrap the body to intercept usage chunk
-    const wrappedBody = wrapStreamForUsage(response.body, (parsed) => {
-      showUsage(parsed);
-    });
-
-    return new Response(wrappedBody, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers
-    });
   };
 
   // ---------------------------------------------------------------------------
