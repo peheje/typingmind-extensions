@@ -321,7 +321,7 @@
 
   function formatCost(cost) {
     if (cost == null) return null;
-    if (cost < 0.0001) return `$${(cost * 100).toFixed(4)}¢`;
+    if (cost < 0.0001) return `${(cost * 100).toFixed(4)}¢`;
     if (cost < 0.01) return `$${cost.toFixed(4)}`;
     return `$${cost.toFixed(3)}`;
   }
