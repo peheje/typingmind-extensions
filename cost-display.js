@@ -380,8 +380,27 @@
   // DOM observer: restore labels when navigating between chats
   // ---------------------------------------------------------------------------
 
-  const observer = new MutationObserver(() => {
-    restoreAllLabels();
+  let restoreTimer = null;
+  const observer = new MutationObserver((mutations) => {
+    // Ignore mutations caused by our own label injection
+    const selfCaused = mutations.every((m) => {
+      for (const node of m.addedNodes) {
+        if (node.nodeType === 1 && (
+          node.hasAttribute?.('data-tm-cost-label') ||
+          node.id === TOTAL_ID
+        )) continue;
+        return false;
+      }
+      return m.addedNodes.length > 0;
+    });
+    if (selfCaused) return;
+
+    // Debounce to avoid hot loops
+    if (restoreTimer) return;
+    restoreTimer = setTimeout(() => {
+      restoreTimer = null;
+      restoreAllLabels();
+    }, 500);
   });
 
   function start() {
