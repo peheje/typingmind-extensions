@@ -1,7 +1,7 @@
 // == TypingMind Extension: Restore new-chat draft ===========================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/draft-restore/restore-draft.js
-// v0.5 - 2026-03-27
+// v0.6 - 2026-03-28
 //
 // TypingMind handles drafts for chats that already have messages, but not for
 // fresh/new chats. This extension saves the textarea globally and restores it
@@ -16,11 +16,10 @@
   const BOUND_ATTRIBUTE = 'data-tm-draft-restore-bound';
   const SAVE_DELAY_MS = 300;
   const RESTORE_DELAY_MS = 150;
-  const CHAT_COMPLETIONS_URL_PATTERN = /\/chat\/completions(?:[/?#]|$)/;
 
   let saveTimerId = null;
   let lastBoundTextarea = null;
-  let lastSentDraft = '';
+  let textareaHadContent = false;
 
   const log = (...messages) => console.log('[TM Draft Restore]', ...messages);
 
@@ -76,16 +75,16 @@
       saveTimerId = null;
     }
 
-    const value = textarea.value;
-    if (lastSentDraft && value.trim() === lastSentDraft.trim()) return;
-
-    lastSentDraft = '';
-    writeDraft(value);
+    writeDraft(textarea.value);
   }
 
   function schedulePersist(textarea) {
     if (saveTimerId) {
       window.clearTimeout(saveTimerId);
+    }
+
+    if (textarea.value.trim()) {
+      textareaHadContent = true;
     }
 
     if (!textarea.value.trim()) {
@@ -135,79 +134,22 @@
     textarea.addEventListener('input', () => schedulePersist(textarea));
     textarea.addEventListener('blur', () => persistTextareaValue(textarea));
 
+    textareaHadContent = false;
     restoreDraftAfterDelay(textarea);
     lastBoundTextarea = textarea;
     log('textarea bound');
   }
 
-  // --- Fetch intercept: clear draft on send ----------------------------------
-
-  function getRequestUrl(input) {
-    if (typeof input === 'string') return input;
-    if (input instanceof URL) return input.toString();
-    if (input && typeof input.url === 'string') return input.url;
-    return '';
-  }
-
-  function getTextFromContentPart(part) {
-    if (typeof part === 'string') return part;
-    if (!part || typeof part !== 'object') return '';
-    if (typeof part.text === 'string') return part.text;
-    if (typeof part.content === 'string') return part.content;
-    return '';
-  }
-
-  function getTextFromMessageContent(content) {
-    if (typeof content === 'string') return content;
-    if (!Array.isArray(content)) return '';
-    return content.map(getTextFromContentPart).filter(Boolean).join('\n');
-  }
-
-  function getLastUserMessageText(body) {
-    if (!body || !Array.isArray(body.messages)) return '';
-
-    for (let index = body.messages.length - 1; index >= 0; index -= 1) {
-      const message = body.messages[index];
-
-      if (message && message.role === 'user') {
-        return getTextFromMessageContent(message.content).trim();
-      }
-    }
-
-    return '';
-  }
-
-  function maybeClearDraftOnSend(bodyText) {
-    const savedDraft = readDraft();
-    if (!savedDraft || !savedDraft.trim()) return;
-
-    const body = JSON.parse(bodyText);
-    const lastUserMessage = getLastUserMessageText(body);
-
-    if (lastUserMessage && lastUserMessage === savedDraft.trim()) {
-      lastSentDraft = savedDraft;
-      writeDraft('');
-      log('cleared draft after send');
-    }
-  }
-
-  const nativeFetch = window.fetch.bind(window);
-  window.fetch = async function patchedFetch(input, init) {
-    try {
-      if (CHAT_COMPLETIONS_URL_PATTERN.test(getRequestUrl(input)) && init && typeof init.body === 'string') {
-        maybeClearDraftOnSend(init.body);
-      }
-    } catch (error) {
-      log('fetch patch error', error);
-    }
-
-    return nativeFetch(input, init);
-  };
-
   // --- Lifecycle -------------------------------------------------------------
 
   const observer = new MutationObserver(() => {
-    bindTextarea(getTextarea());
+    const textarea = getTextarea();
+    bindTextarea(textarea);
+
+    if (textarea && textarea.getAttribute(BOUND_ATTRIBUTE) === 'true' && !textarea.value.trim() && textareaHadContent) {
+      textareaHadContent = false;
+      writeDraft('');
+    }
   });
 
   function handlePageHide() {
