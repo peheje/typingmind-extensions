@@ -215,6 +215,72 @@
         if (text) injectLabelForElement(el, text);
       }
     }
+    updateChatTotal();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Chat total: sum costs of all messages visible in the current chat
+  // ---------------------------------------------------------------------------
+
+  const TOTAL_ID = 'tm-cost-chat-total';
+
+  function updateChatTotal() {
+    const store = loadStore();
+    const responses = document.querySelectorAll('[data-element-id="ai-response"][data-message-uuid]');
+    let totalCost = 0;
+    let totalPrompt = 0;
+    let totalCompletion = 0;
+    let count = 0;
+
+    for (const el of responses) {
+      const uuid = el.getAttribute('data-message-uuid');
+      const data = store[uuid];
+      if (data) {
+        if (data.cost != null) totalCost += data.cost;
+        if (data.prompt_tokens != null) totalPrompt += data.prompt_tokens;
+        if (data.completion_tokens != null) totalCompletion += data.completion_tokens;
+        count++;
+      }
+    }
+
+    // Find the chat date info bar to insert after
+    const dateInfo = document.querySelector('[data-element-id="chat-date-info"]');
+    let container = document.getElementById(TOTAL_ID);
+
+    if (count === 0) {
+      if (container) container.remove();
+      return;
+    }
+
+    const parts = [];
+    parts.push(`Chat total: ${formatCost(totalCost)}`);
+    parts.push(`${formatTokens(totalPrompt)} → ${formatTokens(totalCompletion)}`);
+    parts.push(`${count} messages`);
+    const text = parts.join(' · ');
+
+    if (container) {
+      container.textContent = text;
+      return;
+    }
+
+    if (!dateInfo) return;
+
+    container = document.createElement('div');
+    container.id = TOTAL_ID;
+    container.textContent = text;
+    container.style.cssText = [
+      'font-size: 11px',
+      'color: #8899a6',
+      'text-align: center',
+      'padding: 2px 0 6px',
+      'font-family: ui-monospace, monospace',
+      'opacity: 0.8',
+      'user-select: all',
+      'max-width: 750px',
+      'margin: 0 auto'
+    ].join(';');
+
+    dateInfo.insertAdjacentElement('afterend', container);
   }
 
   // Inject label on the last ai-response (used right after a response finishes)
@@ -256,6 +322,7 @@
           if (uuid) {
             saveEntry(uuid, data);
             log('saved cost for message', uuid);
+            updateChatTotal();
           }
         }
         return;
