@@ -2,7 +2,7 @@
 // Intercepts streaming responses to capture usage/cost data from OpenRouter
 // and displays it inline after each assistant message.
 // Persists cost data in localStorage keyed by message UUID.
-// v0.3 - 2026-03-28
+// v0.4 - 2026-03-29 - IDB tokenUsage hijack for native cost UI sync
 (() => {
   const PREFIX = '[cost-display]';
   const log = (...args) => console.log(PREFIX, ...args);
@@ -13,6 +13,16 @@
   const CHAT_COMPLETIONS_URL_PATTERN = /\/chat\/completions(?:[/?#]|$)/;
   const TITLE_GEN_MARKER = '[[tm-title-gen]]';
   const TOP_BAR_BUTTON_ID = 'tm-cost-topbar-button';
+
+  // IDB constants
+  const IDB_DB_NAME = 'keyval-store';
+  const IDB_STORE_NAME = 'keyval';
+  const IDB_KEY_PREFIX = 'CHAT_';
+  const SYNC_INTERVAL_MS = 800;
+  const DEBUG_SYNC = true; // verbose sync logging, disable after stabilising
+
+  const idbLog = (...args) => console.log(PREFIX, '[idb]', ...args);
+  const idbWarn = (...args) => console.warn(PREFIX, '[idb]', ...args);
 
   // ---------------------------------------------------------------------------
   // Storage
@@ -42,6 +52,187 @@
 
   function setLabelsVisible(visible) {
     localStorage.setItem(LABELS_VISIBLE_KEY, String(visible));
+  }
+
+  // ---------------------------------------------------------------------------
+  // IDB sync — override TM's native tokenUsage with our accurate costs
+  // ---------------------------------------------------------------------------
+
+  let _db = null;
+
+  function getCurrentChatId() {
+    const hash = window.location.hash; // e.g. #chat=dapdPWzL8o
+    const m = hash.match(/^#chat=(.+)$/);
+    return m ? m[1] : '';
+  }
+
+  function openDB() {
+    if (_db) return Promise.resolve(_db);
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(IDB_DB_NAME);
+      req.onsuccess = () => {
+        _db = req.result;
+        _db.onclose = () => { _db = null; };
+        _db.onerror = () => { _db = null; };
+        resolve(_db);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  /**
+   * Atomic read-modify-write: reads chat object, replaces tokenUsage, writes back.
+   * Uses a single readwrite transaction to avoid race conditions with TM.
+   * Returns true if written, false if chat not found.
+   */
+  async function writeChatTokenUsage(chatId, newTokenUsage) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(IDB_STORE_NAME);
+      const key = IDB_KEY_PREFIX + chatId;
+
+      const getReq = store.get(key);
+      getReq.onsuccess = () => {
+        const raw = getReq.result;
+        if (!raw) { resolve(false); return; }
+
+        const wasString = typeof raw === 'string';
+        let chatObj;
+        try {
+          chatObj = wasString ? JSON.parse(raw) : raw;
+        } catch (err) {
+          idbWarn('failed to parse chat object:', err);
+          resolve(false);
+          return;
+        }
+
+        chatObj.tokenUsage = newTokenUsage;
+
+        const putReq = store.put(wasString ? JSON.stringify(chatObj) : chatObj, key);
+        putReq.onsuccess = () => resolve(true);
+        putReq.onerror = () => reject(putReq.error);
+      };
+      getReq.onerror = () => reject(getReq.error);
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  /**
+   * Read tokenUsage from IDB for a chat. Returns { tokenUsage } or null.
+   */
+  async function readChatTokenUsage(chatId) {
+    const db = await openDB();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE_NAME, 'readonly');
+      const store = tx.objectStore(IDB_STORE_NAME);
+      const key = IDB_KEY_PREFIX + chatId;
+
+      const getReq = store.get(key);
+      getReq.onsuccess = () => {
+        const raw = getReq.result;
+        if (!raw) { resolve(null); return; }
+        try {
+          const chatObj = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          resolve({ tokenUsage: chatObj.tokenUsage || null });
+        } catch (err) {
+          idbWarn('failed to parse chat object for read:', err);
+          resolve(null);
+        }
+      };
+      getReq.onerror = () => reject(getReq.error);
+    });
+  }
+
+  /**
+   * Core sync: compare our localStorage totals with IDB tokenUsage, overwrite if different.
+   * If we have no localStorage data for this chat, we trust IDB (cross-device sync).
+   */
+  async function syncTokenUsage() {
+    const chatId = getCurrentChatId();
+    if (!chatId) return;
+
+    try {
+      const { totalCost, totalPrompt, totalCompletion, count } = computeChatTotal();
+
+      // No local cost data → trust IDB (probably synced from another device)
+      if (count === 0) {
+        if (DEBUG_SYNC) idbLog('no local cost data, trusting IDB');
+        return;
+      }
+
+      const idbData = await readChatTokenUsage(chatId);
+      if (!idbData) {
+        if (DEBUG_SYNC) idbLog('chat not found in IDB');
+        return;
+      }
+
+      const existing = idbData.tokenUsage || {};
+      const tmCost = existing.totalCostUSD ?? 0;
+
+      // Already matches — skip
+      if (Math.abs(tmCost - totalCost) < 0.000001) {
+        if (DEBUG_SYNC) idbLog('values match, skipping');
+        return;
+      }
+
+      // Find last message cost for messageCostUSD
+      const store = loadStore();
+      const responses = document.querySelectorAll(
+        '[data-element-id="ai-response"][data-message-uuid]'
+      );
+      let lastMsgCost = 0;
+      let lastMsgTokens = 0;
+      if (responses.length > 0) {
+        const lastUuid = responses[responses.length - 1].getAttribute('data-message-uuid');
+        const lastData = store[lastUuid];
+        if (lastData) {
+          lastMsgCost = lastData.cost || 0;
+          lastMsgTokens = (lastData.prompt_tokens || 0) + (lastData.completion_tokens || 0);
+        }
+      }
+
+      const newTokenUsage = {
+        ...existing, // preserve fields we don't manage
+        totalCostUSD: totalCost,
+        messageCostUSD: lastMsgCost,
+        totalTokens: totalPrompt + totalCompletion,
+        messageTokens: lastMsgTokens,
+      };
+
+      const ok = await writeChatTokenUsage(chatId, newTokenUsage);
+      if (ok) {
+        idbLog(`synced: ${formatCost(tmCost)} → ${formatCost(totalCost)}`);
+      }
+    } catch (err) {
+      idbWarn('sync error:', err);
+    }
+  }
+
+  // Polling loop
+  let _syncInterval = null;
+
+  function startSyncLoop() {
+    if (_syncInterval) return;
+    _syncInterval = setInterval(syncTokenUsage, SYNC_INTERVAL_MS);
+    idbLog('loop started');
+  }
+
+  function stopSyncLoop() {
+    if (_syncInterval) {
+      clearInterval(_syncInterval);
+      _syncInterval = null;
+      idbLog('loop stopped');
+    }
+  }
+
+  function handleNavigation() {
+    const chatId = getCurrentChatId();
+    if (chatId) {
+      startSyncLoop();
+    } else {
+      stopSyncLoop();
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -350,6 +541,8 @@
             saveEntry(uuid, data);
             log('saved cost for message', uuid);
             updateTopBarButton();
+            // Immediate IDB sync — don't wait for next poll cycle
+            syncTokenUsage().catch(err => idbWarn('immediate sync failed:', err));
           }
         }
         return;
@@ -433,6 +626,11 @@
       observer.observe(document.body, { subtree: true, childList: true });
       restoreAllLabels();
     }
+
+    // IDB sync: start/stop polling based on active chat
+    window.addEventListener('hashchange', handleNavigation);
+    window.addEventListener('popstate', handleNavigation);
+    handleNavigation(); // initial check
   }
 
   if (document.readyState === 'loading') {
