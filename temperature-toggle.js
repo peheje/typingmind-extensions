@@ -97,14 +97,14 @@
       tooltip: 'Temperature: 0.3 (controlled). Click to set 0.7. Alt+T to cycle.',
       title: 'Temperature 0.3',
       buttonStyle: Object.freeze({
-        backgroundColor: '#0891b2',
-        color: '#ffffff',
+        backgroundColor: 'transparent',
+        color: '',
         boxShadow: ''
       }),
       badge: Object.freeze({
         text: '0.3',
         backgroundColor: '#ffffff',
-        color: '#0891b2'
+        color: '#6b7280'
       })
     }),
     [TEMP.BALANCED]: Object.freeze({
@@ -113,14 +113,14 @@
       tooltip: 'Temperature: 0.7 (balanced). Click to set 1.0. Alt+T to cycle.',
       title: 'Temperature 0.7',
       buttonStyle: Object.freeze({
-        backgroundColor: '#64748b',
-        color: '#ffffff',
+        backgroundColor: 'transparent',
+        color: '',
         boxShadow: ''
       }),
       badge: Object.freeze({
         text: '0.7',
         backgroundColor: '#ffffff',
-        color: '#64748b'
+        color: '#6b7280'
       })
     }),
     [TEMP.CREATIVE]: Object.freeze({
@@ -129,14 +129,14 @@
       tooltip: 'Temperature: 1.0 (creative). Click to turn off. Alt+T to cycle.',
       title: 'Temperature 1.0',
       buttonStyle: Object.freeze({
-        backgroundColor: '#64748b',
-        color: '#ffffff',
+        backgroundColor: 'transparent',
+        color: '',
         boxShadow: ''
       }),
       badge: Object.freeze({
         text: '1.0',
         backgroundColor: '#ffffff',
-        color: '#64748b'
+        color: '#6b7280'
       })
     })
   });
