@@ -75,7 +75,7 @@
     [SEARCH_MODE.OFF]: Object.freeze({
       pressed: false,
       ariaLabel: 'Web search off',
-      tooltip: 'Web search is off. Click or tap for the next message only. Shift+Click or touch and hold to pin it on. Alt+S toggles once, Shift+Alt+S toggles pinned.',
+      tooltip: 'Web search off. Click to enable. Right-click for settings.',
       title: 'Web search off',
       buttonStyle: Object.freeze({
         backgroundColor: 'transparent',
@@ -87,7 +87,7 @@
     [SEARCH_MODE.ONCE]: Object.freeze({
       pressed: true,
       ariaLabel: 'Web search on for next message',
-      tooltip: 'Web search is on for the next message. Click or tap to cancel. Shift+Click or touch and hold to pin. Alt+S toggles once, Shift+Alt+S toggles pinned.',
+      tooltip: 'Web search on for next message. Click to cancel. Right-click for settings.',
       title: 'Web search on for next message',
       buttonStyle: Object.freeze({
         backgroundColor: '#2563eb',
@@ -103,7 +103,7 @@
     [SEARCH_MODE.PINNED]: Object.freeze({
       pressed: true,
       ariaLabel: 'Web search pinned',
-      tooltip: 'Web search is pinned for every message. Click or tap to switch to one-off. Shift+Click or touch and hold to turn it off. Alt+S toggles once, Shift+Alt+S toggles pinned.',
+      tooltip: 'Web search pinned. Click for one-off. Right-click for settings.',
       title: 'Web search pinned',
       buttonStyle: Object.freeze({
         backgroundColor: '#0f766e',
@@ -400,7 +400,7 @@
     return { getEngine, getMaxResults, setEngine, setMaxResults, cycleEngine, isCustom, subscribe, emit };
   }
 
-  function createSettingsPopup({ document, configStore }) {
+  function createSettingsPopup({ document, configStore, modeStore }) {
     let popup = null;
 
     function isDark() {
@@ -497,6 +497,27 @@
       resultsRow.appendChild(numDisplay);
       resultsRow.appendChild(plusBtn);
       el.appendChild(resultsRow);
+
+      const divider = document.createElement('div');
+      divider.style.cssText = `height: 1px; margin: 10px 0; background: ${dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'};`;
+      el.appendChild(divider);
+
+      const isPinned = modeStore.get() === SEARCH_MODE.PINNED;
+      const pinBtn = document.createElement('button');
+      pinBtn.type = 'button';
+      pinBtn.textContent = isPinned ? 'Unpin search' : 'Pin search on';
+      pinBtn.style.cssText = `
+        width: 100%; padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 500;
+        border: 1px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'};
+        cursor: pointer; text-align: center; transition: all 100ms ease;
+        background: ${isPinned ? '#0f766e' : 'transparent'};
+        color: ${isPinned ? '#ffffff' : (dark ? '#d1d5db' : '#374151')};
+      `;
+      pinBtn.addEventListener('click', () => {
+        modeStore.togglePinned();
+        hide();
+      });
+      el.appendChild(pinBtn);
 
       return el;
     }
@@ -597,12 +618,12 @@
       const configDesc = `${engine}, ${maxResults} results`;
 
       if (mode === SEARCH_MODE.OFF) {
-        return `Web search off (${configDesc}). Click for next message. Right-click for settings. Alt+S toggles once, Shift+Alt+S toggles pinned.`;
+        return `Web search off (${configDesc}). Click to enable. Right-click for settings.`;
       }
       if (mode === SEARCH_MODE.ONCE) {
-        return `Web search on for next message (${configDesc}). Click to cancel. Right-click for settings. Shift+Click to pin.`;
+        return `Web search on for next message (${configDesc}). Click to cancel. Right-click for settings.`;
       }
-      return `Web search pinned (${configDesc}). Click for one-off. Right-click for settings. Shift+Click to turn off.`;
+      return `Web search pinned (${configDesc}). Click to switch to one-off. Right-click for settings.`;
     }
 
     function renderConfigDot(button) {
@@ -629,25 +650,17 @@
       renderConfigDot(button);
     }
 
-    const settingsPopup = createSettingsPopup({ document, configStore });
+    const settingsPopup = createSettingsPopup({ document, configStore, modeStore });
 
     function createButton() {
       const button = document.createElement('button');
       let longPressTimerId = null;
       let suppressNextClick = false;
-      let lastTapTime = 0;
-      let lastPointerWasTouch = false;
 
       function clearLongPressTimer() {
         if (longPressTimerId === null) return;
         window.clearTimeout(longPressTimerId);
         longPressTimerId = null;
-      }
-
-      function clearSuppressedClickSoon() {
-        window.setTimeout(() => {
-          suppressNextClick = false;
-        }, 0);
       }
 
       button.id = BUTTON_ID;
@@ -658,29 +671,19 @@
       button.style.transition = 'background-color 120ms ease, color 120ms ease, box-shadow 120ms ease';
 
       button.addEventListener('pointerdown', (event) => {
-        lastPointerWasTouch = isTouchLikePointer(event);
-        if (!lastPointerWasTouch) return;
+        if (!isTouchLikePointer(event)) return;
 
         clearLongPressTimer();
         longPressTimerId = window.setTimeout(() => {
           longPressTimerId = null;
           suppressNextClick = true;
-          modeStore.togglePinned();
+          settingsPopup.toggle(button);
         }, TOUCH_LONG_PRESS_MS);
       });
 
       button.addEventListener('pointerup', clearLongPressTimer);
-      button.addEventListener('pointerup', () => {
-        clearSuppressedClickSoon();
-      });
-      button.addEventListener('pointercancel', () => {
-        clearLongPressTimer();
-        clearSuppressedClickSoon();
-      });
-      button.addEventListener('pointerleave', () => {
-        clearLongPressTimer();
-        clearSuppressedClickSoon();
-      });
+      button.addEventListener('pointercancel', clearLongPressTimer);
+      button.addEventListener('pointerleave', clearLongPressTimer);
 
       button.addEventListener('click', (event) => {
         if (suppressNextClick) {
@@ -688,19 +691,6 @@
           event.preventDefault();
           return;
         }
-
-        if (event.shiftKey) {
-          modeStore.togglePinned();
-          return;
-        }
-
-        const now = Date.now();
-        if (lastPointerWasTouch && now - lastTapTime < 300) {
-          lastTapTime = 0;
-          settingsPopup.toggle(button);
-          return;
-        }
-        lastTapTime = now;
 
         modeStore.toggleOnce();
       });
@@ -864,12 +854,6 @@
 
       if (key !== 's') return;
       event.preventDefault();
-
-      if (event.shiftKey) {
-        modeStore.togglePinned();
-        return;
-      }
-
       modeStore.toggleOnce();
     }
 
