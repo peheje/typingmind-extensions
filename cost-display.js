@@ -170,9 +170,11 @@
       const existing = idbData.tokenUsage || {};
       const tmCost = existing.totalCostUSD ?? 0;
 
-      // Already matches — skip
+      // Already matches in IDB — but still patch the DOM span
+      // (TM may have re-rendered from stale in-memory state)
       if (Math.abs(tmCost - totalCost) < 0.000001) {
         if (DEBUG_SYNC) idbLog('values match, skipping');
+        patchNativeCostSpan(totalCost);
         return;
       }
 
@@ -203,9 +205,29 @@
       const ok = await writeChatTokenUsage(chatId, newTokenUsage);
       if (ok) {
         idbLog(`synced: ${formatCost(tmCost)} → ${formatCost(totalCost)}`);
+        // Also patch TM's native cost span so it updates without reload
+        patchNativeCostSpan(totalCost);
       }
     } catch (err) {
       idbWarn('sync error:', err);
+    }
+  }
+
+  /**
+   * Directly mutate TM's native cost span in the DOM.
+   * TM doesn't reactively read IDB changes, so we patch the span ourselves.
+   */
+  function patchNativeCostSpan(totalCost) {
+    const aboutBtn = document.querySelector(
+      '[data-tooltip-content="About this chat"]'
+    );
+    if (!aboutBtn) return;
+    const span = aboutBtn.querySelector('span.text-xs');
+    if (!span) return;
+    const formatted = formatCost(totalCost);
+    if (span.textContent !== formatted) {
+      idbLog(`patched native span: ${span.textContent} → ${formatted}`);
+      span.textContent = formatted;
     }
   }
 
