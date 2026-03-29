@@ -7,6 +7,7 @@
 // the tight truncation so the full name can be read at a glance.
 (() => {
   const MODEL_BUTTON_SELECTOR = '[id^="headlessui-menu-button-"]';
+  const REGENERATE_BUTTON_SELECTOR = '[data-element-id="regenerate-button"]';
   const BOUND_ATTRIBUTE = 'data-tm-model-visibility-bound';
 
   const log = (...messages) => console.log('[TM Model Visibility]', ...messages);
@@ -45,7 +46,17 @@
     log('model name made visible');
   }
 
+  function removeRegenerateButton() {
+    const btn = document.querySelector(REGENERATE_BUTTON_SELECTOR);
+    if (btn && btn.getAttribute(BOUND_ATTRIBUTE) !== 'true') {
+      btn.setAttribute(BOUND_ATTRIBUTE, 'true');
+      btn.remove();
+    }
+  }
+
   function findAndApply() {
+    removeRegenerateButton();
+
     const buttons = document.querySelectorAll(MODEL_BUTTON_SELECTOR);
 
     for (const button of buttons) {
