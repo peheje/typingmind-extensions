@@ -446,12 +446,21 @@
       engineRow.style.cssText = 'display: flex; gap: 4px; margin-bottom: 10px;';
       const currentEngine = configStore.getEngine();
 
+      const enginePills = [];
       for (const eng of ENGINE_ORDER) {
         const label = eng === ENGINE.AUTO ? 'Auto' : eng === ENGINE.EXA ? 'Exa' : 'Parallel';
-        engineRow.appendChild(createPill(label, currentEngine === eng, () => {
+        const pill = createPill(label, currentEngine === eng, () => {
           configStore.setEngine(eng);
-          hide();
-        }));
+          const dark2 = isDark();
+          for (const p of enginePills) {
+            const active = p.dataset.engine === eng;
+            p.style.background = active ? (dark2 ? '#3b82f6' : '#2563eb') : 'transparent';
+            p.style.color = active ? '#ffffff' : (dark2 ? '#d1d5db' : '#374151');
+          }
+        });
+        pill.dataset.engine = eng;
+        enginePills.push(pill);
+        engineRow.appendChild(pill);
       }
       el.appendChild(engineRow);
 
@@ -515,7 +524,11 @@
       `;
       pinBtn.addEventListener('click', () => {
         modeStore.togglePinned();
-        hide();
+        const nowPinned = modeStore.get() === SEARCH_MODE.PINNED;
+        const dark2 = isDark();
+        pinBtn.textContent = nowPinned ? 'Unpin search' : 'Pin search on';
+        pinBtn.style.background = nowPinned ? '#0f766e' : 'transparent';
+        pinBtn.style.color = nowPinned ? '#ffffff' : (dark2 ? '#d1d5db' : '#374151');
       });
       el.appendChild(pinBtn);
 
@@ -656,6 +669,7 @@
       const button = document.createElement('button');
       let longPressTimerId = null;
       let suppressNextClick = false;
+      let suppressNextContextMenu = false;
 
       function clearLongPressTimer() {
         if (longPressTimerId === null) return;
@@ -677,6 +691,7 @@
         longPressTimerId = window.setTimeout(() => {
           longPressTimerId = null;
           suppressNextClick = true;
+          suppressNextContextMenu = true;
           settingsPopup.toggle(button);
         }, TOUCH_LONG_PRESS_MS);
       });
@@ -697,6 +712,10 @@
 
       button.addEventListener('contextmenu', (event) => {
         event.preventDefault();
+        if (suppressNextContextMenu) {
+          suppressNextContextMenu = false;
+          return;
+        }
         settingsPopup.toggle(button);
       });
 
