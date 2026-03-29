@@ -1,12 +1,15 @@
 // == TypingMind Extension: OpenRouter web search toggle ===================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/search-mode-toggle.js
-// v0.14 - 2026-03-26
+// v0.15 - 2026-03-29
 (() => {
   const STORAGE_KEY = 'TM_openRouterWebSearchOn';
-  const MODEL_SUFFIX = ':online';
+  const ENGINE_STORAGE_KEY = 'TM_webSearchEngine';
+  const MAX_RESULTS_STORAGE_KEY = 'TM_webSearchMaxResults';
+  const DEFAULT_MAX_RESULTS = 5;
   const CONTAINER_ID = 'tm-online-toggle-container';
   const BUTTON_ID = 'tm-online-toggle-button';
+  const POPUP_ID = 'tm-online-settings-popup';
   const TITLE_REQUEST_MARKER = '[[tm-title-gen]]';
   const TOUCH_LONG_PRESS_MS = 450;
 
@@ -15,6 +18,14 @@
     ONCE: 'once',
     PINNED: 'pinned'
   });
+
+  const ENGINE = Object.freeze({
+    AUTO: 'auto',
+    EXA: 'exa',
+    PARALLEL: 'parallel'
+  });
+
+  const ENGINE_ORDER = [ENGINE.AUTO, ENGINE.EXA, ENGINE.PARALLEL];
 
   const CHAT_COMPLETIONS_URL_PATTERN = /\/chat\/completions(?:[/?#]|$)/;
   const CHAT_INPUT_ACTIONS_SELECTOR = '[data-element-id="chat-input-actions"]';
@@ -51,6 +62,7 @@
       <path d="M9 1.75C5.00194 1.75 1.75 5.00194 1.75 9C1.75 12.9981 5.00194 16.25 9 16.25C12.9981 16.25 16.25 12.9981 16.25 9C16.25 5.00194 12.9981 1.75 9 1.75ZM14.6044 8.25H11.7798C11.7083 6.75716 11.3409 5.35959 10.7406 4.17484C12.6543 4.81806 14.1128 6.37968 14.6044 8.25ZM9 3.25C9.79129 4.40611 10.2595 6.21612 10.3285 8.25H7.67148C7.74051 6.21612 8.20871 4.40611 9 3.25ZM7.25945 4.17484C6.65915 5.35959 6.29171 6.75716 6.2202 8.25H3.39557C3.8872 6.37968 5.34571 4.81806 7.25945 4.17484ZM3.39557 9.75H6.2202C6.29171 11.2428 6.65915 12.6404 7.25945 13.8252C5.34571 13.1819 3.8872 11.6203 3.39557 9.75ZM9 14.75C8.20871 13.5939 7.74051 11.7839 7.67148 9.75H10.3285C10.2595 11.7839 9.79129 13.5939 9 14.75ZM10.7406 13.8252C11.3409 12.6404 11.7083 11.2428 11.7798 9.75H14.6044C14.1128 11.6203 12.6543 13.1819 10.7406 13.8252Z" fill="currentColor"/>
     </svg>
     <span data-tm-online-badge="true" aria-hidden="true" style="position:absolute;top:2px;right:2px;min-width:16px;height:16px;padding:0 3px;border-radius:9999px;font-size:9px;line-height:16px;font-weight:700;display:none;align-items:center;justify-content:center;pointer-events:none;"></span>
+    <span data-tm-online-config-dot="true" aria-hidden="true" style="position:absolute;bottom:2px;left:2px;width:5px;height:5px;border-radius:50%;display:none;pointer-events:none;background-color:#f59e0b;"></span>
   `;
 
   const PIN_BADGE_CONTENT = `
@@ -137,12 +149,6 @@
     if (value === SEARCH_MODE.PINNED) return SEARCH_MODE.PINNED;
     if (value === SEARCH_MODE.ONCE || value === 'true') return SEARCH_MODE.ONCE;
     return SEARCH_MODE.OFF;
-  }
-
-  function updateModelSlug(model, enabled) {
-    if (typeof model !== 'string' || model.length === 0) return model;
-    if (enabled) return model.endsWith(MODEL_SUFFIX) ? model : model + MODEL_SUFFIX;
-    return model.endsWith(MODEL_SUFFIX) ? model.slice(0, -MODEL_SUFFIX.length) : model;
   }
 
   function getRequestUrl(input) {
@@ -243,7 +249,23 @@
     return combinedText.includes(TITLE_REQUEST_MARKER);
   }
 
-  function patchRequestBody(bodyText, mode) {
+  function buildWebPlugin(configStore) {
+    const plugin = { id: 'web' };
+    const engine = configStore.getEngine();
+    const maxResults = configStore.getMaxResults();
+
+    if (engine !== ENGINE.AUTO) {
+      plugin.engine = engine;
+    }
+
+    if (maxResults !== DEFAULT_MAX_RESULTS) {
+      plugin.max_results = maxResults;
+    }
+
+    return plugin;
+  }
+
+  function patchRequestBody(bodyText, mode, configStore) {
     const body = JSON.parse(bodyText);
     if (!body || typeof body !== 'object' || typeof body.model !== 'string') {
       return { bodyText, shouldConsumeWebSearch: false, skippedForTitle: false };
@@ -257,7 +279,10 @@
       body.messages = mapMessagesContent(body.messages, stripTitleRequestMarker);
     }
 
-    body.model = updateModelSlug(body.model, shouldEnableOnline);
+    if (shouldEnableOnline) {
+      const existingPlugins = Array.isArray(body.plugins) ? body.plugins : [];
+      body.plugins = [...existingPlugins.filter(p => p.id !== 'web'), buildWebPlugin(configStore)];
+    }
 
     return {
       bodyText: JSON.stringify(body),
@@ -327,7 +352,214 @@
     };
   }
 
-  function createToggleUI({ document, modeStore }) {
+  function createConfigStore({ localStorage, log }) {
+    const listeners = new Set();
+
+    function getEngine() {
+      const stored = localStorage.getItem(ENGINE_STORAGE_KEY);
+      return ENGINE_ORDER.includes(stored) ? stored : ENGINE.AUTO;
+    }
+
+    function getMaxResults() {
+      const stored = parseInt(localStorage.getItem(MAX_RESULTS_STORAGE_KEY), 10);
+      return (stored >= 1 && stored <= 25) ? stored : DEFAULT_MAX_RESULTS;
+    }
+
+    function emit() {
+      const config = { engine: getEngine(), maxResults: getMaxResults() };
+      for (const listener of listeners) listener(config);
+    }
+
+    function setEngine(engine) {
+      localStorage.setItem(ENGINE_STORAGE_KEY, engine);
+      emit();
+      log('search engine', engine);
+    }
+
+    function setMaxResults(n) {
+      const clamped = Math.max(1, Math.min(25, n));
+      localStorage.setItem(MAX_RESULTS_STORAGE_KEY, String(clamped));
+      emit();
+      log('max results', clamped);
+    }
+
+    function cycleEngine() {
+      const idx = ENGINE_ORDER.indexOf(getEngine());
+      setEngine(ENGINE_ORDER[(idx + 1) % ENGINE_ORDER.length]);
+    }
+
+    function isCustom() {
+      return getEngine() !== ENGINE.AUTO || getMaxResults() !== DEFAULT_MAX_RESULTS;
+    }
+
+    function subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    }
+
+    return { getEngine, getMaxResults, setEngine, setMaxResults, cycleEngine, isCustom, subscribe, emit };
+  }
+
+  function createSettingsPopup({ document, configStore }) {
+    let popup = null;
+
+    function isDark() {
+      return document.documentElement.classList.contains('dark');
+    }
+
+    function createPill(label, isActive, onClick) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = label;
+      const dark = isDark();
+      btn.style.cssText = `
+        padding: 3px 10px; border-radius: 9999px; font-size: 12px; font-weight: 500;
+        border: 1px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'};
+        cursor: pointer; transition: all 100ms ease; line-height: 1.4;
+        background: ${isActive ? (dark ? '#3b82f6' : '#2563eb') : 'transparent'};
+        color: ${isActive ? '#ffffff' : (dark ? '#d1d5db' : '#374151')};
+      `;
+      btn.addEventListener('click', onClick);
+      return btn;
+    }
+
+    function build() {
+      const dark = isDark();
+      const el = document.createElement('div');
+      el.id = POPUP_ID;
+      el.style.cssText = `
+        position: fixed; z-index: 99999; padding: 10px 12px;
+        border-radius: 10px; font-family: system-ui, sans-serif;
+        background: ${dark ? '#1e293b' : '#ffffff'};
+        color: ${dark ? '#e2e8f0' : '#1e293b'};
+        border: 1px solid ${dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'};
+        box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+        min-width: 200px;
+      `;
+
+      const engineLabel = document.createElement('div');
+      engineLabel.textContent = 'Engine';
+      engineLabel.style.cssText = 'font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; opacity: 0.6;';
+      el.appendChild(engineLabel);
+
+      const engineRow = document.createElement('div');
+      engineRow.style.cssText = 'display: flex; gap: 4px; margin-bottom: 10px;';
+      const currentEngine = configStore.getEngine();
+
+      for (const eng of ENGINE_ORDER) {
+        const label = eng === ENGINE.AUTO ? 'Auto' : eng === ENGINE.EXA ? 'Exa' : 'Parallel';
+        engineRow.appendChild(createPill(label, currentEngine === eng, () => {
+          configStore.setEngine(eng);
+          hide();
+        }));
+      }
+      el.appendChild(engineRow);
+
+      const resultsLabel = document.createElement('div');
+      resultsLabel.textContent = 'Max results';
+      resultsLabel.style.cssText = 'font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; opacity: 0.6;';
+      el.appendChild(resultsLabel);
+
+      const resultsRow = document.createElement('div');
+      resultsRow.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+
+      const currentMax = configStore.getMaxResults();
+      const btnStyle = `
+        width: 28px; height: 28px; border-radius: 6px; font-size: 16px; font-weight: 600;
+        border: 1px solid ${dark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.15)'};
+        background: transparent; color: ${dark ? '#d1d5db' : '#374151'};
+        cursor: pointer; display: flex; align-items: center; justify-content: center; line-height: 1;
+      `;
+
+      const minusBtn = document.createElement('button');
+      minusBtn.type = 'button';
+      minusBtn.textContent = '\u2212';
+      minusBtn.style.cssText = btnStyle;
+      minusBtn.addEventListener('click', () => {
+        configStore.setMaxResults(configStore.getMaxResults() - 1);
+        hide();
+      });
+
+      const numDisplay = document.createElement('span');
+      numDisplay.textContent = String(currentMax);
+      numDisplay.style.cssText = 'font-size: 14px; font-weight: 600; min-width: 20px; text-align: center;';
+
+      const plusBtn = document.createElement('button');
+      plusBtn.type = 'button';
+      plusBtn.textContent = '+';
+      plusBtn.style.cssText = btnStyle;
+      plusBtn.addEventListener('click', () => {
+        configStore.setMaxResults(configStore.getMaxResults() + 1);
+        hide();
+      });
+
+      resultsRow.appendChild(minusBtn);
+      resultsRow.appendChild(numDisplay);
+      resultsRow.appendChild(plusBtn);
+      el.appendChild(resultsRow);
+
+      return el;
+    }
+
+    function hide() {
+      if (popup && popup.parentElement) {
+        popup.parentElement.removeChild(popup);
+      }
+      popup = null;
+    }
+
+    function show(anchorElement) {
+      hide();
+      popup = build();
+      document.body.appendChild(popup);
+
+      const rect = anchorElement.getBoundingClientRect();
+      const popupRect = popup.getBoundingClientRect();
+
+      let top = rect.bottom + 4;
+      let left = rect.left;
+
+      if (left + popupRect.width > window.innerWidth - 8) {
+        left = window.innerWidth - popupRect.width - 8;
+      }
+      if (top + popupRect.height > window.innerHeight - 8) {
+        top = rect.top - popupRect.height - 4;
+      }
+
+      popup.style.top = top + 'px';
+      popup.style.left = left + 'px';
+
+      window.setTimeout(() => {
+        document.addEventListener('pointerdown', handleOutsideClick);
+        document.addEventListener('keydown', handleEscape);
+      }, 0);
+    }
+
+    function toggle(anchorElement) {
+      if (popup) { hide(); return; }
+      show(anchorElement);
+    }
+
+    function handleOutsideClick(event) {
+      if (popup && !popup.contains(event.target)) {
+        hide();
+        document.removeEventListener('pointerdown', handleOutsideClick);
+        document.removeEventListener('keydown', handleEscape);
+      }
+    }
+
+    function handleEscape(event) {
+      if (event.key === 'Escape') {
+        hide();
+        document.removeEventListener('pointerdown', handleOutsideClick);
+        document.removeEventListener('keydown', handleEscape);
+      }
+    }
+
+    return { toggle, hide };
+  }
+
+  function createToggleUI({ document, modeStore, configStore }) {
     function isTouchLikePointer(event) {
       return Boolean(event && (event.pointerType === 'touch' || event.pointerType === 'pen'));
     }
@@ -359,26 +591,52 @@
       badgeElement.textContent = badgeConfig.text || '';
     }
 
+    function buildTooltip(mode) {
+      const engine = configStore.getEngine();
+      const maxResults = configStore.getMaxResults();
+      const configDesc = `${engine}, ${maxResults} results`;
+
+      if (mode === SEARCH_MODE.OFF) {
+        return `Web search off (${configDesc}). Click for next message. Right-click for settings. Alt+S toggles once, Shift+Alt+S toggles pinned.`;
+      }
+      if (mode === SEARCH_MODE.ONCE) {
+        return `Web search on for next message (${configDesc}). Click to cancel. Right-click for settings. Shift+Click to pin.`;
+      }
+      return `Web search pinned (${configDesc}). Click for one-off. Right-click for settings. Shift+Click to turn off.`;
+    }
+
+    function renderConfigDot(button) {
+      const dot = button.querySelector('[data-tm-online-config-dot="true"]');
+      if (!dot) return;
+      dot.style.display = configStore.isCustom() ? 'block' : 'none';
+    }
+
     function render(button = getButton(), mode = modeStore.get()) {
       if (!button) return;
 
       const config = MODE_RENDER_CONFIG[mode] || MODE_RENDER_CONFIG[SEARCH_MODE.OFF];
       const badge = button.querySelector('[data-tm-online-badge="true"]');
+      const tooltip = buildTooltip(mode);
 
       button.setAttribute('aria-pressed', String(config.pressed));
       button.setAttribute('data-search-mode', mode);
       button.setAttribute('aria-label', config.ariaLabel);
-      button.setAttribute('data-tooltip-content', config.tooltip);
+      button.setAttribute('data-tooltip-content', tooltip);
       button.setAttribute('title', config.title);
 
       Object.assign(button.style, config.buttonStyle);
       renderBadge(badge, config.badge);
+      renderConfigDot(button);
     }
+
+    const settingsPopup = createSettingsPopup({ document, configStore });
 
     function createButton() {
       const button = document.createElement('button');
       let longPressTimerId = null;
       let suppressNextClick = false;
+      let lastTapTime = 0;
+      let lastPointerWasTouch = false;
 
       function clearLongPressTimer() {
         if (longPressTimerId === null) return;
@@ -400,7 +658,8 @@
       button.style.transition = 'background-color 120ms ease, color 120ms ease, box-shadow 120ms ease';
 
       button.addEventListener('pointerdown', (event) => {
-        if (!isTouchLikePointer(event)) return;
+        lastPointerWasTouch = isTouchLikePointer(event);
+        if (!lastPointerWasTouch) return;
 
         clearLongPressTimer();
         longPressTimerId = window.setTimeout(() => {
@@ -435,8 +694,22 @@
           return;
         }
 
+        const now = Date.now();
+        if (lastPointerWasTouch && now - lastTapTime < 300) {
+          lastTapTime = 0;
+          settingsPopup.toggle(button);
+          return;
+        }
+        lastTapTime = now;
+
         modeStore.toggleOnce();
       });
+
+      button.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        settingsPopup.toggle(button);
+      });
+
       render(button);
       return button;
     }
@@ -454,7 +727,8 @@
 
     return {
       render,
-      getOrCreateContainer
+      getOrCreateContainer,
+      hidePopup: settingsPopup.hide
     };
   }
 
@@ -539,7 +813,7 @@
     };
   }
 
-  function installFetchPatch({ window, modeStore, log }) {
+  function installFetchPatch({ window, modeStore, configStore, log }) {
     const nativeFetch = window.fetch.bind(window);
 
     window.fetch = async function patchedFetch(input, init) {
@@ -547,7 +821,7 @@
 
       try {
         if (shouldPatchRequest(input, nextInit)) {
-          const patchedRequest = patchRequestBody(nextInit.body, modeStore.get());
+          const patchedRequest = patchRequestBody(nextInit.body, modeStore.get(), configStore);
           nextInit.body = patchedRequest.bodyText;
 
           if (patchedRequest.skippedForTitle) {
@@ -568,16 +842,27 @@
 
   function createApp({ window, document, localStorage }) {
     const modeStore = createModeStore({ storageKey: STORAGE_KEY, localStorage, log });
-    const ui = createToggleUI({ document, modeStore });
+    const configStore = createConfigStore({ localStorage, log });
+    const ui = createToggleUI({ document, modeStore, configStore });
     const mountManager = createMountManager({ document, ui });
     const locationWatcher = createLocationWatcher({
       onLocationChange(source) {
         modeStore.clear(source);
+        ui.hidePopup();
       }
     });
 
     function handleKeydown(event) {
-      if (!event.altKey || event.key.toLowerCase() !== 's') return;
+      if (!event.altKey) return;
+      const key = event.key.toLowerCase();
+
+      if (key === 'e') {
+        event.preventDefault();
+        configStore.cycleEngine();
+        return;
+      }
+
+      if (key !== 's') return;
       event.preventDefault();
 
       if (event.shiftKey) {
@@ -589,8 +874,9 @@
     }
 
     function handleStorageChange(event) {
-      if (event && event.key && event.key !== STORAGE_KEY) return;
-      modeStore.emit();
+      if (!event || !event.key) return;
+      if (event.key === STORAGE_KEY) { modeStore.emit(); return; }
+      if (event.key === ENGINE_STORAGE_KEY || event.key === MAX_RESULTS_STORAGE_KEY) { configStore.emit(); return; }
     }
 
     function wrapHistoryMethod(methodName) {
@@ -606,7 +892,8 @@
 
     function start() {
       modeStore.subscribe((mode) => ui.render(undefined, mode));
-      installFetchPatch({ window, modeStore, log });
+      configStore.subscribe(() => ui.render());
+      installFetchPatch({ window, modeStore, configStore, log });
 
       locationWatcher.sync();
       modeStore.clear('page loaded');
