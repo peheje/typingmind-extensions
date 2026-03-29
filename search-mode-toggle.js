@@ -655,7 +655,7 @@
 
       let badgeConfig = config.badge;
       if (badgeConfig && (mode === SEARCH_MODE.ONCE || mode === SEARCH_MODE.PINNED)) {
-        badgeConfig = { ...badgeConfig, text: String(maxResults) };
+        badgeConfig = { ...badgeConfig, text: String(maxResults), html: undefined };
       }
 
       button.setAttribute('aria-pressed', String(config.pressed));
