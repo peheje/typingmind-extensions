@@ -389,7 +389,7 @@
     }
 
     function isCustom() {
-      return getEngine() !== ENGINE.AUTO || getMaxResults() !== DEFAULT_MAX_RESULTS;
+      return getEngine() !== ENGINE.AUTO;
     }
 
     function subscribe(listener) {
@@ -651,6 +651,12 @@
       const config = MODE_RENDER_CONFIG[mode] || MODE_RENDER_CONFIG[SEARCH_MODE.OFF];
       const badge = button.querySelector('[data-tm-online-badge="true"]');
       const tooltip = buildTooltip(mode);
+      const maxResults = configStore.getMaxResults();
+
+      let badgeConfig = config.badge;
+      if (badgeConfig && (mode === SEARCH_MODE.ONCE || mode === SEARCH_MODE.PINNED)) {
+        badgeConfig = { ...badgeConfig, text: String(maxResults) };
+      }
 
       button.setAttribute('aria-pressed', String(config.pressed));
       button.setAttribute('data-search-mode', mode);
@@ -659,7 +665,7 @@
       button.setAttribute('title', config.title);
 
       Object.assign(button.style, config.buttonStyle);
-      renderBadge(badge, config.badge);
+      renderBadge(badge, badgeConfig);
       renderConfigDot(button);
     }
 
