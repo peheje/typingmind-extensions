@@ -214,7 +214,7 @@
     if (!aboutBtn) return;
     const span = aboutBtn.querySelector('span.text-xs');
     if (!span) return;
-    const formatted = formatCost(totalCost);
+    const formatted = totalCost === 0 ? 'Free' : formatCost(totalCost);
     if (span.textContent !== formatted) {
       idbLog(`patched native span: ${span.textContent} → ${formatted}`);
       span.textContent = formatted;
