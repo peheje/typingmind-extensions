@@ -477,7 +477,7 @@
       minusBtn.style.cssText = btnStyle;
       minusBtn.addEventListener('click', () => {
         configStore.setMaxResults(configStore.getMaxResults() - 1);
-        hide();
+        numDisplay.textContent = String(configStore.getMaxResults());
       });
 
       const numDisplay = document.createElement('span');
@@ -490,7 +490,7 @@
       plusBtn.style.cssText = btnStyle;
       plusBtn.addEventListener('click', () => {
         configStore.setMaxResults(configStore.getMaxResults() + 1);
-        hide();
+        numDisplay.textContent = String(configStore.getMaxResults());
       });
 
       resultsRow.appendChild(minusBtn);
