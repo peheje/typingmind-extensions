@@ -82,19 +82,10 @@
     link.target = '_blank';
     link.rel = 'noopener';
     link.textContent = '$';
-    link.title = 'OpenRouter logs';
-    link.style.cssText = [
-      'font-size: 13px',
-      'font-weight: 600',
-      'font-family: ui-monospace, monospace',
-      'opacity: 0.45',
-      'transition: opacity 0.15s',
-      'text-decoration: none',
-      'color: inherit',
-      'cursor: pointer',
-    ].join(';');
-    link.addEventListener('mouseenter', () => { link.style.opacity = '0.9'; });
-    link.addEventListener('mouseleave', () => { link.style.opacity = '0.45'; });
+    link.className = 'w-9 justify-center dark:hover:bg-white/20 dark:active:bg-white/25 hover:bg-slate-900/20 active:bg-slate-900/25 focus-visible:outline-offset-2 focus-visible:outline-slate-500 text-slate-900 dark:text-white inline-flex items-center rounded-lg h-9 transition-all font-semibold text-xs';
+    link.setAttribute('data-tooltip-id', 'global');
+    link.setAttribute('data-tooltip-content', 'OpenRouter logs');
+    link.style.textDecoration = 'none';
 
     minimap.parentElement.insertBefore(link, minimap);
   }
