@@ -224,12 +224,18 @@
       '[data-tooltip-content="About this chat"]'
     );
     if (!aboutBtn) return;
-    const span = aboutBtn.querySelector('span.text-xs');
-    if (!span) return;
+    const spans = aboutBtn.querySelectorAll('span.text-xs');
+    if (spans.length === 0) return;
     const formatted = formatCost(totalCost);
-    if (span.textContent !== formatted) {
-      idbLog(`patched native span: ${span.textContent} → ${formatted}`);
-      span.textContent = formatted;
+    // First span = text label, patch with our cost
+    if (spans[0].textContent !== formatted) {
+      idbLog(`patched native span: ${spans[0].textContent} → ${formatted}`);
+      spans[0].textContent = formatted;
+    }
+    // Second span = pie badge — TM puts cost text here after our IDB write,
+    // hide it so cost isn't shown twice (gradient pie chart still visible)
+    if (spans[1]) {
+      spans[1].style.fontSize = '0';
     }
   }
 
