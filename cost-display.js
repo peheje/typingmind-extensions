@@ -51,5 +51,56 @@
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // OpenRouter logs link
+  // ---------------------------------------------------------------------------
+
+  const LINK_ID = 'tm-or-logs-link';
+
+  function ensureLogsLink() {
+    const chatId = getCurrentChatId();
+    const existing = document.getElementById(LINK_ID);
+
+    if (!chatId) {
+      if (existing) existing.remove();
+      return;
+    }
+
+    const minimap = document.querySelector('[data-element-id="minimap-button"]');
+    if (!minimap) return;
+
+    const href = `https://openrouter.ai/logs?session_id=${encodeURIComponent(chatId)}`;
+
+    if (existing) {
+      if (existing.href !== href) existing.href = href;
+      return;
+    }
+
+    const link = document.createElement('a');
+    link.id = LINK_ID;
+    link.href = href;
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.textContent = '$';
+    link.title = 'OpenRouter logs';
+    link.style.cssText = [
+      'font-size: 13px',
+      'font-weight: 600',
+      'font-family: ui-monospace, monospace',
+      'opacity: 0.45',
+      'transition: opacity 0.15s',
+      'text-decoration: none',
+      'color: inherit',
+      'cursor: pointer',
+    ].join(';');
+    link.addEventListener('mouseenter', () => { link.style.opacity = '0.9'; });
+    link.addEventListener('mouseleave', () => { link.style.opacity = '0.45'; });
+
+    minimap.parentElement.insertBefore(link, minimap);
+  }
+
+  // Poll for link presence (handles navigation + TM re-renders)
+  setInterval(ensureLogsLink, 1000);
+
   log('extension loaded');
 })();
