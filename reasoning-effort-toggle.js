@@ -1,7 +1,7 @@
 // == TypingMind Extension: OpenRouter reasoning effort toggle =================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/reasoning-effort-toggle.js
-// v0.1 - 2026-03-26
+// v0.2 - 2026-03-30
 (() => {
   const STORAGE_KEY = 'TM_openRouterReasoningEffort';
   const CONTAINER_ID = 'tm-reasoning-toggle-container';
@@ -19,14 +19,16 @@
   const SIDEBAR_BUTTON_SELECTOR = '[data-element-id="new-chat-button-in-side-bar"]';
 
   const EFFORT = Object.freeze({
-    OFF: 'off',
+    AUTO: 'auto',
+    NONE: 'none',
     MINIMAL: 'minimal',
     LOW: 'low',
     MEDIUM: 'medium',
-    HIGH: 'high'
+    HIGH: 'high',
+    XHIGH: 'xhigh'
   });
 
-  const EFFORT_ORDER = [EFFORT.OFF, EFFORT.MINIMAL, EFFORT.LOW, EFFORT.MEDIUM, EFFORT.HIGH];
+  const EFFORT_ORDER = [EFFORT.AUTO, EFFORT.NONE, EFFORT.MINIMAL, EFFORT.LOW, EFFORT.MEDIUM, EFFORT.HIGH, EFFORT.XHIGH];
 
   const BUTTON_CLASS_NAME = [
     'relative',
@@ -63,17 +65,33 @@
   `;
 
   const MODE_RENDER_CONFIG = Object.freeze({
-    [EFFORT.OFF]: Object.freeze({
+    [EFFORT.AUTO]: Object.freeze({
       pressed: false,
-      ariaLabel: 'Reasoning effort off',
-      tooltip: 'Reasoning effort is off. Click to set minimal. Alt+R to cycle.',
-      title: 'Reasoning effort off',
+      ariaLabel: 'Reasoning effort auto',
+      tooltip: 'Reasoning effort: auto (model decides). Click to set none. Alt+R to cycle.',
+      title: 'Reasoning effort auto',
       buttonStyle: Object.freeze({
         backgroundColor: 'transparent',
         color: '',
         boxShadow: ''
       }),
       badge: null
+    }),
+    [EFFORT.NONE]: Object.freeze({
+      pressed: true,
+      ariaLabel: 'Reasoning effort none',
+      tooltip: 'Reasoning effort: none (disabled). Click to set minimal. Alt+R to cycle.',
+      title: 'Reasoning effort none',
+      buttonStyle: Object.freeze({
+        backgroundColor: '#94a3b8',
+        color: '#ffffff',
+        boxShadow: ''
+      }),
+      badge: Object.freeze({
+        text: 'OFF',
+        backgroundColor: '#ffffff',
+        color: '#94a3b8'
+      })
     }),
     [EFFORT.MINIMAL]: Object.freeze({
       pressed: true,
@@ -126,17 +144,33 @@
     [EFFORT.HIGH]: Object.freeze({
       pressed: true,
       ariaLabel: 'Reasoning effort high',
-      tooltip: 'Reasoning effort: high. Click to turn off. Alt+R to cycle.',
+      tooltip: 'Reasoning effort: high. Click to set xhigh. Alt+R to cycle.',
       title: 'Reasoning effort high',
       buttonStyle: Object.freeze({
         backgroundColor: '#dc2626',
         color: '#ffffff',
-        boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.28)'
+        boxShadow: ''
       }),
       badge: Object.freeze({
         text: 'HI',
         backgroundColor: '#ffffff',
         color: '#dc2626'
+      })
+    }),
+    [EFFORT.XHIGH]: Object.freeze({
+      pressed: true,
+      ariaLabel: 'Reasoning effort xhigh',
+      tooltip: 'Reasoning effort: xhigh (maximum). Click to set auto. Alt+R to cycle.',
+      title: 'Reasoning effort xhigh',
+      buttonStyle: Object.freeze({
+        backgroundColor: '#7c2d12',
+        color: '#ffffff',
+        boxShadow: 'inset 0 0 0 1px rgba(255, 255, 255, 0.28)'
+      }),
+      badge: Object.freeze({
+        text: 'XH',
+        backgroundColor: '#ffffff',
+        color: '#7c2d12'
       })
     })
   });
@@ -144,8 +178,8 @@
   const log = (...messages) => console.log('[TM Reasoning]', ...messages);
 
   function normalizeStoredEffort(value) {
-    if (EFFORT_ORDER.includes(value) && value !== EFFORT.OFF) return value;
-    return EFFORT.OFF;
+    if (EFFORT_ORDER.includes(value)) return value;
+    return EFFORT.AUTO;
   }
 
   function getRequestUrl(input) {
@@ -160,7 +194,7 @@
   }
 
   function patchRequestBody(bodyText, effort) {
-    if (effort === EFFORT.OFF) return { bodyText, patched: false };
+    if (effort === EFFORT.AUTO) return { bodyText, patched: false };
     if (bodyText.includes(TITLE_GEN_MARKER)) return { bodyText, patched: false };
 
     const body = JSON.parse(bodyText);
