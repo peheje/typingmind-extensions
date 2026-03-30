@@ -24,9 +24,17 @@
 
   // In-memory accumulator for the current chat's correct total.
   // Bootstrapped from IDB on chat open; only increases via showUsage().
+  let _knownChatId = null;
   let _knownTotal = null;
   let _knownPrompt = 0;
   let _knownCompletion = 0;
+
+  function resetAccumulator() {
+    _knownChatId = null;
+    _knownTotal = null;
+    _knownPrompt = 0;
+    _knownCompletion = 0;
+  }
 
   // ---------------------------------------------------------------------------
   // Storage
@@ -148,6 +156,12 @@
     const chatId = getCurrentChatId();
     if (!chatId) return;
 
+    // Detect chat change — reset accumulator so we bootstrap fresh
+    if (chatId !== _knownChatId) {
+      resetAccumulator();
+      _knownChatId = chatId;
+    }
+
     try {
       const idbData = await readChatTokenUsage(chatId);
       if (!idbData) {
@@ -228,11 +242,6 @@
   }
 
   function handleNavigation() {
-    // Reset accumulator so next sync bootstraps from IDB for the new chat
-    _knownTotal = null;
-    _knownPrompt = 0;
-    _knownCompletion = 0;
-
     const chatId = getCurrentChatId();
     if (chatId) {
       startSyncLoop();
@@ -425,12 +434,13 @@
     const completion = data.completion_tokens || 0;
 
     try {
-      // Bootstrap if needed (e.g. first message in a new chat)
-      if (_knownTotal === null) {
+      // Bootstrap if needed, or chat changed since last call
+      if (_knownTotal === null || chatId !== _knownChatId) {
         const idbData = await readChatTokenUsage(chatId);
         _knownTotal = idbData?.tokenUsage?.totalCostUSD ?? 0;
         _knownPrompt = 0;
         _knownCompletion = 0;
+        _knownChatId = chatId;
       }
 
       _knownTotal += cost;
