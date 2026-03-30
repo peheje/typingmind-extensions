@@ -22,6 +22,12 @@
   const idbLog = (...args) => console.log(PREFIX, '[idb]', ...args);
   const idbWarn = (...args) => console.warn(PREFIX, '[idb]', ...args);
 
+  // In-memory accumulator for the current chat's correct total.
+  // Bootstrapped from IDB on chat open; only increases via showUsage().
+  let _knownTotal = null;
+  let _knownPrompt = 0;
+  let _knownCompletion = 0;
+
   // ---------------------------------------------------------------------------
   // Storage
   // ---------------------------------------------------------------------------
@@ -135,22 +141,14 @@
   }
 
   /**
-   * Core sync: compare our localStorage totals with IDB tokenUsage, overwrite if different.
-   * If we have no localStorage data for this chat, we trust IDB (cross-device sync).
+   * Core sync: defend our _knownTotal against TM overwriting IDB with its own value.
+   * On first run for a chat (_knownTotal === null), bootstrap from IDB (trust synced value).
    */
   async function syncTokenUsage() {
     const chatId = getCurrentChatId();
     if (!chatId) return;
 
     try {
-      const { totalCost, totalPrompt, totalCompletion, count } = computeChatTotal();
-
-      // No local cost data → trust IDB (probably synced from another device)
-      if (count === 0) {
-        if (DEBUG_SYNC) idbLog('no local cost data, trusting IDB');
-        return;
-      }
-
       const idbData = await readChatTokenUsage(chatId);
       if (!idbData) {
         if (DEBUG_SYNC) idbLog('chat not found in IDB');
@@ -160,43 +158,34 @@
       const existing = idbData.tokenUsage || {};
       const tmCost = existing.totalCostUSD ?? 0;
 
-      // Already matches in IDB — but still patch the DOM span
-      // (TM may have re-rendered from stale in-memory state)
-      if (Math.abs(tmCost - totalCost) < 0.000001) {
-        if (DEBUG_SYNC) idbLog('values match, skipping');
-        patchNativeCostSpan(totalCost);
+      // Bootstrap: first sync cycle for this chat — trust IDB
+      if (_knownTotal === null) {
+        _knownTotal = tmCost;
+        _knownPrompt = existing.totalTokens ?? 0; // approximate, but fine
+        _knownCompletion = 0;
+        if (DEBUG_SYNC) idbLog('bootstrapped from IDB:', formatCost(_knownTotal));
+        patchNativeCostSpan(_knownTotal);
         return;
       }
 
-      // Find last message cost for messageCostUSD
-      const store = loadStore();
-      const responses = document.querySelectorAll(
-        '[data-element-id="ai-response"][data-message-uuid]'
-      );
-      let lastMsgCost = 0;
-      let lastMsgTokens = 0;
-      if (responses.length > 0) {
-        const lastUuid = responses[responses.length - 1].getAttribute('data-message-uuid');
-        const lastData = store[lastUuid];
-        if (lastData) {
-          lastMsgCost = lastData.cost || 0;
-          lastMsgTokens = (lastData.prompt_tokens || 0) + (lastData.completion_tokens || 0);
-        }
+      // Already matches — just keep the DOM span in sync
+      if (Math.abs(tmCost - _knownTotal) < 0.000001) {
+        if (DEBUG_SYNC) idbLog('values match, skipping');
+        patchNativeCostSpan(_knownTotal);
+        return;
       }
 
+      // TM overwrote our value (or it drifted) — restore ours
       const newTokenUsage = {
-        ...existing, // preserve fields we don't manage
-        totalCostUSD: totalCost,
-        messageCostUSD: lastMsgCost,
-        totalTokens: totalPrompt + totalCompletion,
-        messageTokens: lastMsgTokens,
+        ...existing,
+        totalCostUSD: _knownTotal,
+        totalTokens: _knownPrompt + _knownCompletion,
       };
 
       const ok = await writeChatTokenUsage(chatId, newTokenUsage);
       if (ok) {
-        idbLog(`synced: ${formatCost(tmCost)} → ${formatCost(totalCost)}`);
-        // Also patch TM's native cost span so it updates without reload
-        patchNativeCostSpan(totalCost);
+        idbLog(`restored: ${formatCost(tmCost)} → ${formatCost(_knownTotal)}`);
+        patchNativeCostSpan(_knownTotal);
       }
     } catch (err) {
       idbWarn('sync error:', err);
@@ -239,6 +228,11 @@
   }
 
   function handleNavigation() {
+    // Reset accumulator so next sync bootstraps from IDB for the new chat
+    _knownTotal = null;
+    _knownPrompt = 0;
+    _knownCompletion = 0;
+
     const chatId = getCurrentChatId();
     if (chatId) {
       startSyncLoop();
@@ -415,34 +409,54 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Top bar button: shows chat total, toggles per-message labels
-  // ---------------------------------------------------------------------------
-
-  function computeChatTotal() {
-    const store = loadStore();
-    const responses = document.querySelectorAll('[data-element-id="ai-response"][data-message-uuid]');
-    let totalCost = 0;
-    let totalPrompt = 0;
-    let totalCompletion = 0;
-    let count = 0;
-
-    for (const el of responses) {
-      const uuid = el.getAttribute('data-message-uuid');
-      const data = store[uuid];
-      if (data) {
-        if (data.cost != null) totalCost += data.cost;
-        if (data.prompt_tokens != null) totalPrompt += data.prompt_tokens;
-        if (data.completion_tokens != null) totalCompletion += data.completion_tokens;
-        count++;
-      }
-    }
-
-    return { totalCost, totalPrompt, totalCompletion, count };
-  }
-
-  // ---------------------------------------------------------------------------
   // showUsage: called when stream parser finds usage data
   // ---------------------------------------------------------------------------
+
+  /**
+   * Increment _knownTotal and write to IDB immediately.
+   * Called once per completed response — cost only ever increases.
+   */
+  async function addCostToTotal(data) {
+    const chatId = getCurrentChatId();
+    if (!chatId) return;
+
+    const cost = data.cost || 0;
+    const prompt = data.prompt_tokens || 0;
+    const completion = data.completion_tokens || 0;
+
+    try {
+      // Bootstrap if needed (e.g. first message in a new chat)
+      if (_knownTotal === null) {
+        const idbData = await readChatTokenUsage(chatId);
+        _knownTotal = idbData?.tokenUsage?.totalCostUSD ?? 0;
+        _knownPrompt = 0;
+        _knownCompletion = 0;
+      }
+
+      _knownTotal += cost;
+      _knownPrompt += prompt;
+      _knownCompletion += completion;
+
+      const idbData = await readChatTokenUsage(chatId);
+      const existing = idbData?.tokenUsage || {};
+
+      const newTokenUsage = {
+        ...existing,
+        totalCostUSD: _knownTotal,
+        messageCostUSD: cost,
+        totalTokens: _knownPrompt + _knownCompletion,
+        messageTokens: prompt + completion,
+      };
+
+      const ok = await writeChatTokenUsage(chatId, newTokenUsage);
+      if (ok) {
+        idbLog(`added ${formatCost(cost)}, total now ${formatCost(_knownTotal)}`);
+        patchNativeCostSpan(_knownTotal);
+      }
+    } catch (err) {
+      idbWarn('addCostToTotal failed:', err);
+    }
+  }
 
   function showUsage(parsed) {
     const usage = parsed.usage;
@@ -462,6 +476,9 @@
 
     log('usage:', data);
 
+    // Increment cumulative total immediately (don't wait for DOM)
+    addCostToTotal(data).catch(err => idbWarn('addCostToTotal error:', err));
+
     let attempts = 0;
     const tryInject = () => {
       if (injectCostLabelOnLast(text)) {
@@ -472,8 +489,6 @@
           if (uuid) {
             saveEntry(uuid, data);
             log('saved cost for message', uuid);
-            // Immediate IDB sync — don't wait for next poll cycle
-            syncTokenUsage().catch(err => idbWarn('immediate sync failed:', err));
           }
         }
         return;
