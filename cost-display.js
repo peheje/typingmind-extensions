@@ -28,12 +28,14 @@
   let _knownTotal = null;
   let _knownPrompt = 0;
   let _knownCompletion = 0;
+  let _hasLocalCosts = false; // true once we've added at least one cost in this session
 
   function resetAccumulator() {
     _knownChatId = null;
     _knownTotal = null;
     _knownPrompt = 0;
     _knownCompletion = 0;
+    _hasLocalCosts = false;
   }
 
   // ---------------------------------------------------------------------------
@@ -182,6 +184,13 @@
         return;
       }
 
+      // If we haven't added any costs this session, don't fight TM
+      if (!_hasLocalCosts) {
+        _knownTotal = tmCost; // stay in sync with whatever TM has
+        if (DEBUG_SYNC) idbLog('no local costs, tracking TM:', formatCost(tmCost));
+        return;
+      }
+
       // Already matches — just keep the DOM span in sync
       if (Math.abs(tmCost - _knownTotal) < 0.000001) {
         if (DEBUG_SYNC) idbLog('values match, skipping');
@@ -217,7 +226,7 @@
     if (!aboutBtn) return;
     const span = aboutBtn.querySelector('span.text-xs');
     if (!span) return;
-    const formatted = totalCost === 0 ? 'Free' : formatCost(totalCost);
+    const formatted = formatCost(totalCost);
     if (span.textContent !== formatted) {
       idbLog(`patched native span: ${span.textContent} → ${formatted}`);
       span.textContent = formatted;
@@ -345,9 +354,7 @@
 
   function formatCost(cost) {
     if (cost == null) return null;
-    if (cost < 0.0001) return `${(cost * 100).toFixed(4)}¢`;
-    if (cost < 0.01) return `$${cost.toFixed(4)}`;
-    return `$${cost.toFixed(3)}`;
+    return `$${cost.toFixed(4)}`;
   }
 
   function formatTokens(n) {
@@ -446,6 +453,7 @@
       _knownTotal += cost;
       _knownPrompt += prompt;
       _knownCompletion += completion;
+      _hasLocalCosts = true;
 
       const idbData = await readChatTokenUsage(chatId);
       const existing = idbData?.tokenUsage || {};
