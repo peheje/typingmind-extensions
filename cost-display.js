@@ -47,8 +47,7 @@
     try {
       const body = JSON.parse(init.body);
       body.session_id = chatId;
-      body.user = chatId;
-      log('tagged request with session_id + user:', chatId);
+      log('tagged request with session_id:', chatId);
       return nativeFetch(input, { ...init, body: JSON.stringify(body) });
     } catch (err) {
       warn('failed to inject session_id:', err);
