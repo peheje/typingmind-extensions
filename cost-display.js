@@ -224,12 +224,13 @@
       '[data-tooltip-content="About this chat"]'
     );
     if (!aboutBtn) return;
-    const span = aboutBtn.querySelector('span.text-xs');
-    if (!span) return;
     const formatted = formatCost(totalCost);
-    if (span.textContent !== formatted) {
-      idbLog(`patched native span: ${span.textContent} → ${formatted}`);
-      span.textContent = formatted;
+    // Patch all text-xs spans (text label + circular pie badge)
+    for (const span of aboutBtn.querySelectorAll('span.text-xs')) {
+      if (span.textContent !== formatted) {
+        idbLog(`patched native span: ${span.textContent} → ${formatted}`);
+        span.textContent = formatted;
+      }
     }
   }
 
