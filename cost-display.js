@@ -354,7 +354,9 @@
 
   function formatCost(cost) {
     if (cost == null) return null;
-    return `$${cost.toFixed(4)}`;
+    // Show all significant decimals (up to 8), strip trailing zeros
+    const s = cost.toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
+    return `$${s}`;
   }
 
   function formatTokens(n) {
