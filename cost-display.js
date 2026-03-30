@@ -74,7 +74,7 @@
     const minimap = document.querySelector('[data-element-id="minimap-button"]');
     if (!minimap) return;
 
-    const href = `https://openrouter.ai/logs?session_id=${encodeURIComponent(chatId)}`;
+    const href = `https://openrouter.ai/logs?tab=sessions&session_id=${encodeURIComponent(chatId)}`;
 
     if (existing) {
       if (existing.href !== href) existing.href = href;
