@@ -19,13 +19,11 @@ Example:
 
 The extension stores its toggle state locally and adds a `Web Search: ON/OFF` button in the app UI. It also supports the `Alt+S` shortcut.
 
-All extensions that patch outgoing requests (web search, temperature, prompt cache, reasoning effort) skip their modifications for TypingMind's title-generation requests by detecting a custom marker in your title prompt. The search-mode extension strips the marker before the request reaches the model.
+All extensions that patch outgoing requests (web search, temperature, prompt cache, reasoning effort) skip their modifications for TypingMind's title-generation requests by detecting a `[[tm-title-gen]]` marker in your title prompt.
 
 Recommended title-prompt prefix:
 
 - `[[tm-title-gen]] Generate a short and relevant title for this chat based on the user message.`
-
-The marker is removed from the outbound request before it is sent, so OpenRouter logs and copied cURL payloads will show the cleaned prompt without `[[tm-title-gen]]`.
 
 ## Notes
 
