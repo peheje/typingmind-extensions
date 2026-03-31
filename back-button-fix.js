@@ -25,16 +25,12 @@
   }
 
   function pushGuardState() {
-    window.history.pushState({ tmBackGuard: true }, '');
+    window.history.pushState({ tmBackGuard: true }, '', window.location.href);
+    log('pushed guard state');
   }
 
-  function handlePopState(event) {
-    // Only handle our guard states — let real navigation through.
-    if (!event.state?.tmBackGuard) {
-      pushGuardState();
-      return;
-    }
-
+  function handlePopState() {
+    log('popstate fired, state:', JSON.stringify(history.state));
     tryCloseOverlay();
 
     // Re-push so the next back press is caught too.
