@@ -162,61 +162,6 @@
     return CHAT_COMPLETIONS_URL_PATTERN.test(getRequestUrl(input)) && init && typeof init.body === 'string';
   }
 
-  function mapContentText(content, transformText) {
-    if (typeof content === 'string') {
-      return transformText(content);
-    }
-
-    if (!Array.isArray(content)) {
-      return content;
-    }
-
-    return content.map((part) => {
-      if (typeof part === 'string') {
-        return transformText(part);
-      }
-
-      if (!part || typeof part !== 'object') {
-        return part;
-      }
-
-      if (typeof part.text === 'string') {
-        return { ...part, text: transformText(part.text) };
-      }
-
-      if (typeof part.content === 'string') {
-        return { ...part, content: transformText(part.content) };
-      }
-
-      return part;
-    });
-  }
-
-  function mapMessagesContent(messages, transformText) {
-    if (!Array.isArray(messages)) return messages;
-
-    return messages.map((message) => {
-      if (!message || typeof message !== 'object') {
-        return message;
-      }
-
-      return {
-        ...message,
-        content: mapContentText(message.content, transformText)
-      };
-    });
-  }
-
-  function stripTitleRequestMarker(text) {
-    if (typeof text !== 'string' || !text.includes(TITLE_REQUEST_MARKER)) {
-      return text;
-    }
-
-    return text
-      .replace(TITLE_REQUEST_MARKER, '')
-      .replace(/^\s+/, '');
-  }
-
   function buildWebPlugin(configStore) {
     const plugin = { id: 'web' };
     const engine = configStore.getEngine();
@@ -242,10 +187,6 @@
     const webSearchEnabled = mode !== SEARCH_MODE.OFF;
     const isTitleGenerationRequest = bodyText.includes(TITLE_REQUEST_MARKER);
     const shouldEnableOnline = webSearchEnabled && !isTitleGenerationRequest;
-
-    if (isTitleGenerationRequest) {
-      body.messages = mapMessagesContent(body.messages, stripTitleRequestMarker);
-    }
 
     if (shouldEnableOnline) {
       const existingPlugins = Array.isArray(body.plugins) ? body.plugins : [];
