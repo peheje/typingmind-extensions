@@ -162,20 +162,6 @@
     return CHAT_COMPLETIONS_URL_PATTERN.test(getRequestUrl(input)) && init && typeof init.body === 'string';
   }
 
-  function getTextFromContentPart(part) {
-    if (typeof part === 'string') return part;
-    if (!part || typeof part !== 'object') return '';
-    if (typeof part.text === 'string') return part.text;
-    if (typeof part.content === 'string') return part.content;
-    return '';
-  }
-
-  function getTextFromMessageContent(content) {
-    if (typeof content === 'string') return content;
-    if (!Array.isArray(content)) return '';
-    return content.map(getTextFromContentPart).filter(Boolean).join('\n');
-  }
-
   function mapContentText(content, transformText) {
     if (typeof content === 'string') {
       return transformText(content);
@@ -231,24 +217,6 @@
       .replace(/^\s+/, '');
   }
 
-  function isLikelyTitleGenerationRequest(body) {
-    if (!body || !Array.isArray(body.messages) || body.messages.length === 0) {
-      return false;
-    }
-
-    const combinedText = body.messages
-      .filter(Boolean)
-      .map((message) => getTextFromMessageContent(message.content))
-      .join('\n')
-      .trim();
-
-    if (!combinedText) {
-      return false;
-    }
-
-    return combinedText.includes(TITLE_REQUEST_MARKER);
-  }
-
   function buildWebPlugin(configStore) {
     const plugin = { id: 'web' };
     const engine = configStore.getEngine();
@@ -272,7 +240,7 @@
     }
 
     const webSearchEnabled = mode !== SEARCH_MODE.OFF;
-    const isTitleGenerationRequest = isLikelyTitleGenerationRequest(body);
+    const isTitleGenerationRequest = bodyText.includes(TITLE_REQUEST_MARKER);
     const shouldEnableOnline = webSearchEnabled && !isTitleGenerationRequest;
 
     if (isTitleGenerationRequest) {
