@@ -10,7 +10,7 @@
   const CONTAINER_ID = 'tm-online-toggle-container';
   const BUTTON_ID = 'tm-online-toggle-button';
   const POPUP_ID = 'tm-online-settings-popup';
-  const TITLE_REQUEST_MARKER = '[[tm-title-gen]]';
+  const TITLE_GEN_MARKER = '[[tm-title-gen]]';
   const TOUCH_LONG_PRESS_MS = 450;
 
   const SEARCH_MODE = Object.freeze({
@@ -185,7 +185,7 @@
     }
 
     const webSearchEnabled = mode !== SEARCH_MODE.OFF;
-    const isTitleGenerationRequest = bodyText.includes(TITLE_REQUEST_MARKER);
+    const isTitleGenerationRequest = bodyText.includes(TITLE_GEN_MARKER);
     const shouldEnableOnline = webSearchEnabled && !isTitleGenerationRequest;
 
     if (shouldEnableOnline) {

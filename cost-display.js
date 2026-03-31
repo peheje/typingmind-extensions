@@ -2,9 +2,8 @@
 // Intercepts all chat/completions requests and injects session_id = chat hash ID
 // so costs can be tracked per-conversation in OpenRouter's dashboard.
 (() => {
-  const PREFIX = '[session-id]';
-  const log = (...args) => console.log(PREFIX, ...args);
-  const warn = (...args) => console.warn(PREFIX, ...args);
+  const log = (...args) => console.log('[TM Session ID]', ...args);
+  const warn = (...args) => console.warn('[TM Session ID]', ...args);
 
   // TODO: remove after all devices have run this once
   localStorage.removeItem('TM_costDisplayData');
