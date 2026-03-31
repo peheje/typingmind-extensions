@@ -5,10 +5,6 @@
   const log = (...args) => console.log('[TM Session ID]', ...args);
   const warn = (...args) => console.warn('[TM Session ID]', ...args);
 
-  // TODO: remove after all devices have run this once
-  localStorage.removeItem('TM_costDisplayData');
-  localStorage.removeItem('TM_costDisplayShowLabels');
-
   const CHAT_COMPLETIONS_URL_PATTERN = /\/chat\/completions(?:[/?#]|$)/;
 
   function getRequestUrl(input) {

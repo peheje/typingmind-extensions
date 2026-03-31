@@ -264,7 +264,7 @@
     function render(button = getButton(), effort = modeStore.get()) {
       if (!button) return;
 
-      const config = MODE_RENDER_CONFIG[effort] || MODE_RENDER_CONFIG[EFFORT.OFF];
+      const config = MODE_RENDER_CONFIG[effort] || MODE_RENDER_CONFIG[EFFORT.AUTO];
       const badge = button.querySelector('[data-tm-reasoning-badge="true"]');
 
       button.setAttribute('aria-pressed', String(config.pressed));
