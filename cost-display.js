@@ -89,8 +89,10 @@
     minimap.parentElement.insertBefore(link, minimap);
   }
 
-  // Poll for link presence (handles navigation + TM re-renders)
-  setInterval(ensureLogsLink, 1000);
+  // React to DOM changes + hash navigation instead of polling
+  ensureLogsLink();
+  new MutationObserver(ensureLogsLink).observe(document.body, { childList: true, subtree: true });
+  window.addEventListener('hashchange', ensureLogsLink);
 
   log('extension loaded');
 })();
