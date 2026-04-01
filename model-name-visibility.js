@@ -47,17 +47,17 @@
     log('model name made visible');
   }
 
-  function removeButton(selector) {
+  function hideButton(selector) {
     const btn = document.querySelector(selector);
     if (btn && btn.getAttribute(BOUND_ATTRIBUTE) !== 'true') {
       btn.setAttribute(BOUND_ATTRIBUTE, 'true');
-      btn.remove();
+      btn.style.display = 'none';
     }
   }
 
   function findAndApply() {
-    removeButton(REGENERATE_BUTTON_SELECTOR);
-    removeButton(LIST_MORE_BUTTON_SELECTOR);
+    hideButton(REGENERATE_BUTTON_SELECTOR);
+    hideButton(LIST_MORE_BUTTON_SELECTOR);
 
     const buttons = document.querySelectorAll(MODEL_BUTTON_SELECTOR);
 
