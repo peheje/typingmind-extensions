@@ -1,7 +1,6 @@
 // == TypingMind Extension: OpenRouter reasoning effort toggle =================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/reasoning-effort-toggle.js
-// v0.2 - 2026-03-30
 (() => {
   const STORAGE_KEY = 'TM_openRouterReasoningEffort';
   const CONTAINER_ID = 'tm-reasoning-toggle-container';

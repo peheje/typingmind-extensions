@@ -1,7 +1,6 @@
 // == TypingMind Extension: OpenRouter web search toggle ===================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/search-mode-toggle.js
-// v0.15 - 2026-03-29
 (() => {
   const STORAGE_KEY = 'TM_openRouterWebSearchOn';
   const ENGINE_STORAGE_KEY = 'TM_webSearchEngine';

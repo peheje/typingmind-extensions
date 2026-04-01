@@ -1,7 +1,6 @@
 // == TypingMind Extension: Model name visibility =============================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/model-name-visibility.js
-// v0.1 - 2026-03-27
 //
 // Makes the selected model name always visible (including mobile) and removes
 // the tight truncation so the full name can be read at a glance.

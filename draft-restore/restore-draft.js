@@ -1,7 +1,6 @@
 // == TypingMind Extension: Restore new-chat draft ===========================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/draft-restore/restore-draft.js
-// v0.6 - 2026-03-28
 //
 // TypingMind handles drafts for chats that already have messages, but not for
 // fresh/new chats. This extension saves the textarea globally and restores it

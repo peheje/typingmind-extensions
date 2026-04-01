@@ -1,7 +1,6 @@
 // == TypingMind Extension: OpenRouter temperature toggle ======================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/temperature-toggle.js
-// v0.1 - 2026-03-27
 (() => {
   const STORAGE_KEY = 'TM_openRouterTemperature';
   const CONTAINER_ID = 'tm-temp-toggle-container';

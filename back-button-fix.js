@@ -1,7 +1,6 @@
 // == TypingMind Extension: Android back-button fix ============================
 // Prevents the Android PWA from closing when pressing the back button.
 // Instead, closes any open sidebar, modal, or popup first.
-// v0.1 - 2026-03-31
 (() => {
   const log = (...messages) => console.log('[TM Back Button]', ...messages);
 

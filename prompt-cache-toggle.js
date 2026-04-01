@@ -1,7 +1,6 @@
 // == TypingMind Extension: OpenRouter prompt cache toggle ====================
 // Install in TypingMind using a pinned jsDelivr commit URL, for example:
 // https://cdn.jsdelivr.net/gh/peheje/Typingmind-Extension-searchmode@COMMIT_SHA/prompt-cache-toggle.js
-// v0.1 - 2026-03-26
 (() => {
   const STORAGE_KEY = 'TM_openRouterPromptCacheMode';
   const CONTAINER_ID = 'tm-cache-toggle-container';
