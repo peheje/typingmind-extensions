@@ -6,6 +6,14 @@ A collection of single-file TypingMind extensions that expose OpenRouter API fea
 
 TypingMind sends requests to an OpenRouter-compatible endpoint but only exposes a subset of what the API supports. These extensions intercept outgoing `fetch` calls to `/chat/completions` and inject extra fields into the JSON body before the request leaves the browser. No backend, no build step, no dependencies.
 
+## Why per-request, not per-chat
+
+Most chat UIs treat settings like web search or temperature as conversation-level toggles: on for the whole chat or off for the whole chat. These extensions work differently -- they apply **per request**, meaning every individual message you send can have a different configuration.
+
+This matters because a conversation's needs change as it progresses. You might start a chat with web search enabled to ground the model in current facts, then turn it off for follow-up reasoning that doesn't need fresh data, then turn it back on ten messages later when the topic shifts. Web search, prompt caching, and reasoning effort all cost tokens, so being able to enable them surgically -- only on the messages that benefit -- keeps costs down without sacrificing quality. The same applies to temperature: you might want deterministic output for a code block and then switch to creative sampling for brainstorming, all within the same conversation.
+
+Because the extensions patch each outgoing fetch call independently (rather than storing a flag that applies to an entire chat session), the toggle state at the moment you hit send is the state that gets used. Click, send, done.
+
 ## How they work
 
 Every request-patching extension follows the same pattern:
